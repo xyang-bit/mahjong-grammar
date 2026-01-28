@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>Mahjong Grammar</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@500;700&family=ZCOOL+KuaiLe&display=swap" rel="stylesheet">
+    <style>
+      :root {
+        /* A. Color Palette (The "Warm Embrace") */
+        --color-bg-canvas: #FDF6E3;
+        --color-bg-surface: #FFFFFF;
+        --color-stroke-primary: #2D2424;
+        --color-shadow-hard: #E0D6C2;
+
+        /* Grammar Accents */
+        --color-noun-blue: #7FA1C3;
+        --color-verb-red: #E08D79;
+        --color-adj-green: #8FB996;
+        --color-func-yellow: #E8C547;
+        --color-wild-purple: #B4A0E5;
+
+        /* C. Shape & Depth */
+        --border-radius-lg: 24px;
+        --border-radius-sm: 12px;
+        --stroke-width: 3px;
+      }
+
+      body {
+        background-color: var(--color-bg-canvas);
+        font-family: 'Nunito', sans-serif;
+        color: var(--color-stroke-primary);
+        margin: 0;
+        overscroll-behavior: none; /* Prevents bounce on mobile PWA */
+      }
+
+      /* Utility to map types to CSS variables dynamically */
+      .type-noun { --tile-accent: var(--color-noun-blue); }
+      .type-verb { --tile-accent: var(--color-verb-red); }
+      .type-adj { --tile-accent: var(--color-adj-green); }
+      .type-grammar { --tile-accent: var(--color-func-yellow); }
+      .type-wild { --tile-accent: var(--color-wild-purple); }
+
+      /* The "Dock" wood texture */
+      .hand-dock {
+        background-color: #D6C0A6;
+        border-top: var(--stroke-width) solid var(--color-stroke-primary);
+        box-shadow: inset 0px 10px 20px rgba(0,0,0,0.1);
+      }
+      
+      /* Custom Scrollbar */
+      ::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+      }
+      ::-webkit-scrollbar-track {
+        background: transparent; 
+      }
+      ::-webkit-scrollbar-thumb {
+        background: rgba(45, 36, 36, 0.2); 
+        border-radius: 4px;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: rgba(45, 36, 36, 0.4); 
+      }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "react": "https://aistudiocdn.com/react@^19.2.0",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+    "react/": "https://aistudiocdn.com/react@^19.2.0/"
+  }
+}
+</script>
+</head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>
