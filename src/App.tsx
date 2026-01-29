@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { MahjongTile } from './components/MahjongTile';
 import { useGameLogic } from './hooks/useGameLogic';
 import { LESSONS, DECK_MANIFEST, POWER_UP_IDS, BASIC_SHELF_IDS } from './constants';
@@ -407,7 +407,7 @@ export default function App() {
                             <span className="text-white/80 text-[10px] font-mono">🔥 +2 Pts | 👑 x2 Mult</span>
                         </div>
                         <div className="flex gap-2 overflow-x-auto w-full no-scrollbar pb-1">
-                            {POWER_UP_IDS.map(id => {
+                            {POWER_UP_IDS.map((id: string) => {
                                 const card = DECK_MANIFEST.find(c => c.id === id);
                                 if (!card) return null;
                                 const isSelected = game.selectionQueue.some(item => item.type === 'SHELF' && item.identifier === id);

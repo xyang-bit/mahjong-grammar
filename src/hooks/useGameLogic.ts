@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { CardData, Player, WordType, GameMode, Lesson, NetworkRole, NetworkMessage, SyncStatePayload, ActionPayload, SelectionItem } from '../types';
-import { generateDeck, DECK_MANIFEST, LESSONS, POWER_UP_IDS } from '../constants';
+import { generateDeck, DECK_MANIFEST, LESSONS } from '../constants';
 
 // PeerJS global declaration
 declare var Peer: any;
@@ -207,7 +207,7 @@ export const useGameLogic = () => {
         });
     };
 
-    const handleHostReceivedData = (msg: NetworkMessage, conn: any) => {
+    const handleHostReceivedData = (msg: NetworkMessage, _conn: any) => {
         if (msg.type === 'JOIN_REQUEST') {
             const newPlayerId = players.length + 1;
             const newPlayer: Player = {
