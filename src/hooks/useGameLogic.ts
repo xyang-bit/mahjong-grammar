@@ -1,6 +1,7 @@
+
 import { useState, useEffect, useRef } from 'react';
 import { CardData, Player, WordType, GameMode, Lesson, NetworkRole, NetworkMessage, SyncStatePayload, ActionPayload, SelectionItem } from '../types';
-import { generateDeck, DECK_MANIFEST, LESSONS } from '../constants';
+import { generateDeck, DECK_MANIFEST, LESSONS, POWER_UP_IDS } from '../constants';
 
 // PeerJS global declaration
 declare var Peer: any;
@@ -57,7 +58,7 @@ export const useGameLogic = () => {
         setTimeout(() => setMessage(null), 4000);
     };
 
-    // --- STRICT GRAMMAR VALIDATION ENGINE ---
+    // --- ENHANCED GRAMMAR VALIDATION ENGINE ---
     const validateSandboxMeld = (cards: CardData[]): ValidationResult => {
         if (cards.length < 2) return { isValid: false, error: "Sentence too short (min 2 words)" };
 
@@ -65,11 +66,17 @@ export const useGameLogic = () => {
         const types = cards.map(c => c.type);
         const lastIdx = cards.length - 1;
 
-        // Definitions for Transition Logic
-        const particles = ['的', '了', '吗', '过', '呢', '吧', '得'];
-        const conjunctions = ['但是', '因为', '所以', '虽然', '可是', '和', '跟'];
-        const aspectMarkers = ['了', '过'];
+        // Definitions
         const questionWords = ['谁', '什么', '哪里', '为什么', '怎么', '几'];
+        const measureWords = ['岁', '个', '口', '位', '号', '点', '月', '星期'];
+        const numbers = ['两', '几', '一', '二', '三', '四', '五', '六', '七', '八', '九', '十'];
+        const demonstratives = ['这', '那', '哪'];
+        const intensifiers = ['很', '太', '不', '最', '非常'];
+
+        // Verbs that MUST have an object and cannot end a sentence
+        const transitiveVerbs = [
+            '喜欢', '爱', '有', '没有', '叫', '姓', '想', '要', '问', '介绍', '说', '觉得', '找', '给', '带'
+        ];
 
         // 1. Mandatory Predicate Check
         const hasVerb = types.includes('verb');
@@ -77,65 +84,46 @@ export const useGameLogic = () => {
         const hasZai = hanzis.includes('在');
         const hasShi = hanzis.includes('是');
         if (!hasVerb && !hasAdj && !hasZai && !hasShi) {
-            return { isValid: false, error: "Nonsense: Every sentence needs a predicate (is, at, an action, or a description)." };
+            return { isValid: false, error: "Missing Action: Every sentence needs a verb or 'is'." };
         }
 
-        // 2. Bigram (Transition) Analysis
+        // 2. Constituency and Transition Analysis
         for (let i = 0; i < cards.length; i++) {
             const current = hanzis[i];
             const currType = types[i];
-            const next = i < lastIdx ? hanzis[i + 1] : null;
-            const nextType = i < lastIdx ? types[i + 1] : null;
+            const prev = i > 0 ? hanzis[i - 1] : null;
 
-            if (!next) continue;
-
-            // A. Particle Stacking (e.g., "的的")
-            if (particles.includes(current) && particles.includes(next)) {
-                return { isValid: false, error: `Invalid Sequence: You cannot place the particle '${next}' after the particle '${current}'.` };
-            }
-
-            // B. Conjunction -> Particle (e.g., "但是的")
-            if (conjunctions.includes(current) && particles.includes(next)) {
-                return { isValid: false, error: `Grammar Error: A conjunction like '${current}' cannot be modified by the particle '${next}'.` };
-            }
-
-            // C. Aspect Marker Context (e.g., "晚上了")
-            if (aspectMarkers.includes(next)) {
-                if (currType !== 'verb' && currType !== 'adj') {
-                    return { isValid: false, error: `Misplaced Marker: '${next}' must follow an action or description, not '${current}'.` };
+            // A. Measure Word/Unit Constraint (Fixes "号 喜欢")
+            // Measure words MUST be preceded by a number or 'this/that'
+            if (measureWords.includes(current)) {
+                if (i === 0 || (!numbers.includes(prev!) && !demonstratives.includes(prev!))) {
+                    return { isValid: false, error: `Grammar: '${current}' is a unit and needs a number before it (e.g. '3号').` };
                 }
             }
 
-            // D. 'de' (的) Context (e.g., "去的名字")
-            if (current === '的' || ['我的', '你的', '他的'].includes(current)) {
-                if (nextType === 'verb' && !['想', '喜欢', '要', '爱'].includes(next)) {
-                    return { isValid: false, error: `Invalid usage of '${current}': It cannot modify the verb '${next}'.` };
-                }
-            }
-
-            // E. Noun/Pronoun Clumping (e.g., "我你们")
-            const isPronoun = (h: string) => ['我', '你', '他', '她', '我们', '你们', '他们', '您'].includes(h);
-            if (isPronoun(current) && isPronoun(next)) {
-                return { isValid: false, error: `Sequence Error: You cannot place two pronouns ('${current}' and '${next}') together.` };
+            // B. Negative/Adverb Placement
+            if (['不', '没有', '很'].includes(current) && i === lastIdx) {
+                return { isValid: false, error: `Incomplete: '${current}' cannot end a sentence.` };
             }
         }
 
-        // 3. Question Logic
+        // 3. Position Logic (Fixes "没有 今天 他")
+        const illegalStarts = ['吗', '了', '的', '过', '呢', '吧', '个', '口', '岁', '位', '号', '点', '也', '都'];
+        if (illegalStarts.includes(hanzis[0])) {
+            return { isValid: false, error: `Start Error: Cannot begin with '${hanzis[0]}'.` };
+        }
+
+        // 4. Transitivity & Termination Logic (Fixes "他 喜欢")
+        if (transitiveVerbs.includes(hanzis[lastIdx])) {
+            return { isValid: false, error: `Incomplete Thought: What does he '${hanzis[lastIdx]}'? Add an object.` };
+        }
+
+        // 5. Redundant Question check
         const hasInterrogative = hanzis.some(h => questionWords.includes(h));
         const hasMa = hanzis.includes('吗');
         if (hasInterrogative && hasMa) {
-            return { isValid: false, error: "Redundant Question: Use a question word ('谁') OR '吗', not both." };
+            return { isValid: false, error: "Question Error: Don't use 'who/what' and 'ma' together." };
         }
-        if (hasMa && hanzis[lastIdx] !== '吗') {
-            return { isValid: false, error: "'吗' (ma) must be at the very end of the sentence." };
-        }
-
-        // 4. Global Position Checks
-        const illegalStarts = ['吗', '了', '的', '和', '过', '呢', '吧', '个', '口'];
-        if (illegalStarts.includes(hanzis[0])) return { isValid: false, error: `Invalid Start: Cannot start with '${hanzis[0]}'.` };
-
-        const illegalEnds = ['很', '不', '因为', '虽然', '想', '要', '叫', '姓', '在', '跟', '由于', '但是', '可是', '最'];
-        if (illegalEnds.includes(hanzis[lastIdx])) return { isValid: false, error: `Incomplete: '${hanzis[lastIdx]}' cannot be the final word.` };
 
         return { isValid: true, error: null };
     };
@@ -207,7 +195,7 @@ export const useGameLogic = () => {
         });
     };
 
-    const handleHostReceivedData = (msg: NetworkMessage, _conn: any) => {
+    const handleHostReceivedData = (msg: NetworkMessage, conn: any) => {
         if (msg.type === 'JOIN_REQUEST') {
             const newPlayerId = players.length + 1;
             const newPlayer: Player = {

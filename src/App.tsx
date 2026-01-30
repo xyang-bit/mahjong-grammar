@@ -1,4 +1,5 @@
-import { useState } from 'react';
+
+import React, { useState } from 'react';
 import { MahjongTile } from './components/MahjongTile';
 import { useGameLogic } from './hooks/useGameLogic';
 import { LESSONS, DECK_MANIFEST, POWER_UP_IDS, BASIC_SHELF_IDS } from './constants';
@@ -156,10 +157,10 @@ export default function App() {
     return (
         <div className="h-screen w-full flex flex-col bg-[var(--color-bg-canvas)] overflow-hidden">
 
-            {/* GLOBAL TOAST MESSAGE */}
+            {/* GLOBAL TOAST MESSAGE - Updated for better centering and overflow prevention */}
             {game.message && (
-                <div className="fixed top-32 left-1/2 -translate-x-1/2 z-50 animate-bounce w-full px-4 text-center pointer-events-none">
-                    <div className="inline-block bg-[var(--color-stroke-primary)] text-white px-6 py-3 rounded-xl font-bold shadow-2xl border-2 border-white text-sm md:text-base">
+                <div className="fixed top-28 left-0 right-0 z-50 flex justify-center pointer-events-none px-4 md:px-12 animate-in slide-in-from-top-4">
+                    <div className="bg-[var(--color-stroke-primary)] text-white px-8 py-3 rounded-2xl font-bold shadow-2xl border-2 border-white text-center max-w-lg">
                         {game.message}
                     </div>
                 </div>
@@ -407,7 +408,7 @@ export default function App() {
                             <span className="text-white/80 text-[10px] font-mono">🔥 +2 Pts | 👑 x2 Mult</span>
                         </div>
                         <div className="flex gap-2 overflow-x-auto w-full no-scrollbar pb-1">
-                            {POWER_UP_IDS.map((id: string) => {
+                            {POWER_UP_IDS.map(id => {
                                 const card = DECK_MANIFEST.find(c => c.id === id);
                                 if (!card) return null;
                                 const isSelected = game.selectionQueue.some(item => item.type === 'SHELF' && item.identifier === id);
