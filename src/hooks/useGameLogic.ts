@@ -412,16 +412,15 @@ export const useGameLogic = () => {
                 const sequence: SelectionItem[] = action.data;
                 const cardsToMeld = sequence.map(item => {
                     if (item.type === 'HAND') return activeP.hand[item.identifier as number];
-                    else {
-                        const t = DECK_MANIFEST.find(c => c.id === item.identifier);
-                        return t ? { ...t, id: `PU-${t.id}-${Date.now()}` } : null;
-                    }
+                    const t = DECK_MANIFEST.find(c => c.id === item.identifier);
+                    return t ? { ...t, id: `PU-${t.id}-${Date.now()}` } : null;
                 }).filter((c): c is CardData => !!c);
 
                 const indicesToRemove = sequence.filter(item => item.type === 'HAND').map(item => item.identifier as number);
-                const fullSentence = cardsToMeld.map(c => c.hanzi).join('');
 
+                // --- STAGE 1: AUTOMATED APP VALIDATION (Your Gold Standard) ---
                 if (mode === 'LESSON' && activeLesson) {
+                    const fullSentence = cardsToMeld.map(c => c.hanzi).join('');
                     const currentProb = activeLesson.problems[currentProblemIndex];
                     if (currentProb.solutions.includes(fullSentence)) {
                         activeP.score += 100;
@@ -445,30 +444,56 @@ export const useGameLogic = () => {
                         return;
                     }
                 } else {
-                    // SANDBOX VALIDATION
+                    // SANDBOX VALIDATION (App Check)
                     const validation = validateSandboxMeld(cardsToMeld);
                     if (!validation.isValid) {
                         triggerMessage(`⚠️ ${validation.error}`);
-                        return;
+                        return; // Rejects immediately; turn doesn't advance
                     }
 
-                    let meldScore = cardsToMeld.length * 20;
+                    // --- STAGE 2: MULTIPLAYER CONSENSUS LOOP ---
+                    if (role === 'HOST' && newPlayers.length > 1) {
+                        // Remove cards from hand visually before the review
+                        activeP.hand = activeP.hand.filter((_, i) => !indicesToRemove.includes(i));
 
-                    const particleList = ['的', '了', '吗', '过', '呢', '得'];
-                    let particleCount = 0;
-                    cardsToMeld.forEach(c => { if (particleList.includes(c.hanzi)) particleCount++; });
-                    meldScore += (particleCount * 10);
+                        const challenge: SyncStatePayload['challenge'] = {
+                            meld: cardsToMeld,
+                            challengerId: undefined,
+                            status: 'PENDING',
+                            endTime: Date.now() + 5000, // 5-second window for peers to challenge
+                            votes: {}
+                        };
 
-                    const hasConnectors = (fullSentence.includes('因为') && fullSentence.includes('所以')) ||
-                        (fullSentence.includes('虽然') && fullSentence.includes('但是'));
-                    if (hasConnectors) meldScore *= 2;
+                        // Transition to CHALLENGE phase and wait
+                        broadcastState(newPlayers, 'CHALLENGE', currentTurn, newDiscard, newDeck.length, true, challenge);
+                    } else {
+                        // Offline or Solo Sandbox: Award points immediately
+                        activeP.melds = [...activeP.melds, cardsToMeld];
+                        activeP.hand = activeP.hand.filter((_, i) => !indicesToRemove.includes(i));
 
-                    activeP.melds = [...activeP.melds, cardsToMeld];
-                    activeP.hand = activeP.hand.filter((_, i) => !indicesToRemove.includes(i));
-                    activeP.score += meldScore;
+                        // Point Calculation Logic
+                        let meldScore = cardsToMeld.length * 20;
+                        const fullSentence = cardsToMeld.map(c => c.hanzi).join('');
+                        const particleList = ['的', '了', '吗', '过', '呢', '得'];
+                        let particleCount = 0;
+                        cardsToMeld.forEach(c => { if (particleList.includes(c.hanzi)) particleCount++; });
+                        meldScore += (particleCount * 10);
 
-                    if (hasConnectors) triggerMessage(`👑 Multi-clause Bonus! +${meldScore}pts`);
-                    else triggerMessage(`✅ Correct Construction! +${meldScore}pts`);
+                        const hasConnectors = (fullSentence.includes('因为') && fullSentence.includes('所以')) ||
+                            (fullSentence.includes('虽然') && fullSentence.includes('但是'));
+                        if (hasConnectors) meldScore *= 2;
+
+                        activeP.score += meldScore;
+                        if (hasConnectors) triggerMessage(`👑 Multi-clause Bonus! +${meldScore}pts`);
+                        else triggerMessage(`✅ Correct Construction! +${meldScore}pts`);
+
+                        if (role === 'HOST') {
+                            broadcastState(newPlayers, 'DISCARD', currentTurn, newDiscard, newDeck.length);
+                        } else {
+                            setPlayers(newPlayers);
+                            setPhase('DISCARD');
+                        }
+                    }
                 }
                 break;
 
