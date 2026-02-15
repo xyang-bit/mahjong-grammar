@@ -166,13 +166,16 @@ export const useGameLogic = () => {
         };
 
         try {
+            console.log("Attempting to create lobby with ID:", id);
             await set(ref(db, `rooms/${id}`), roomState);
+            console.log("Lobby created successfully!");
             setRoomId(id);
             setRole('HOST');
             setMode('LOBBY');
             setMyPlayerId(1);
-        } catch (err) {
-            triggerMessage("Failed to create room.");
+        } catch (err: any) {
+            console.error("Firebase Create Lobby Error:", err);
+            triggerMessage(`Failed to create room: ${err.message || 'Unknown error'}`);
         }
     };
 
