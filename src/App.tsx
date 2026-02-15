@@ -16,7 +16,7 @@ export default function App() {
     // 1. MAIN MENU OVERLAY
     if (!mode) {
         return (
-            <div className="h-screen w-full flex flex-col items-center justify-center bg-[var(--color-bg-canvas)] p-6 space-y-8 overflow-y-auto">
+            <div className="min-h-screen w-full flex flex-col items-center justify-center bg-[var(--color-bg-canvas)] p-6 gap-4 overflow-y-auto">
                 <div className="text-center">
                     <h1 className="font-zcool text-6xl text-[var(--color-stroke-primary)] animate-bounce">
                         麻将中文
@@ -24,7 +24,7 @@ export default function App() {
                     <p className="text-[var(--color-stroke-primary)] font-bold opacity-60">Mahjong Grammar</p>
                 </div>
 
-                <div className="flex flex-col gap-6 w-full max-w-md bg-white p-6 rounded-2xl border-2 border-[var(--color-stroke-primary)] shadow-xl">
+                <div className="main-menu-card flex flex-col gap-6 w-full max-w-md bg-white p-6 shadow-xl">
                     {/* Name Input */}
                     <div>
                         <label className="block text-xs font-bold uppercase text-[var(--color-stroke-primary)] mb-1">Your Name</label>
@@ -84,16 +84,18 @@ export default function App() {
 
                     <div className="space-y-2 pt-4">
                         <div className="text-xs font-bold uppercase opacity-50">Lessons</div>
-                        {LESSONS.map((lesson) => (
-                            <button
-                                key={lesson.id}
-                                onClick={() => game.startLesson(lesson.id)}
-                                className="w-full bg-[var(--color-bg-canvas)] text-left p-3 rounded-lg border border-[var(--color-stroke-primary)]/30 hover:bg-white hover:border-[var(--color-stroke-primary)] transition-all flex justify-between items-center text-sm"
-                            >
-                                <span className="font-bold">{lesson.title}</span>
-                                <span className="opacity-50">Play →</span>
-                            </button>
-                        ))}
+                        <div className="max-h-60 overflow-y-auto space-y-2 pr-1">
+                            {LESSONS.map((lesson) => (
+                                <button
+                                    key={lesson.id}
+                                    onClick={() => game.startLesson(lesson.id)}
+                                    className="w-full bg-[var(--color-bg-canvas)] text-left p-2 rounded-lg border border-[var(--color-stroke-primary)]/30 hover:bg-white hover:border-[var(--color-stroke-primary)] transition-all flex justify-between items-center text-sm"
+                                >
+                                    <span className="font-bold">{lesson.title}</span>
+                                    <span className="opacity-50">Play →</span>
+                                </button>
+                            ))}
+                        </div>
                     </div>
                 </div>
             </div>
