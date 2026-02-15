@@ -20,7 +20,7 @@ export const MahjongTile: React.FC<TileProps> = ({ card, onClick, isSelected, si
 
     // Helper to determine optimal font size for Hanzi based on length
     const getHanziSize = () => {
-        const len = card.hanzi.length;
+        const len = card.hanzi?.length || 0;
         if (size === 'sm') {
             if (len >= 4) return 'text-[0.65rem]';
             if (len === 3) return 'text-[0.75rem]';
@@ -39,7 +39,7 @@ export const MahjongTile: React.FC<TileProps> = ({ card, onClick, isSelected, si
 
     // Helper for Pinyin size
     const getPinyinSize = () => {
-        const len = card.pinyin.length;
+        const len = card.pinyin?.length || 0;
         if (size === 'sm') return 'text-[0.5em]';
         if (len > 10) return 'text-[0.65em]'; // Long pinyin scale down
         return 'text-[0.8em]';

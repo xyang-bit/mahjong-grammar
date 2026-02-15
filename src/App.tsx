@@ -127,9 +127,9 @@ export default function App() {
                         {players?.map(p => (
                             <div key={p.id} className="flex items-center gap-3 p-3 bg-[var(--color-bg-canvas)] rounded-lg border border-[var(--color-stroke-primary)]/20">
                                 <div className="w-8 h-8 rounded-full bg-[var(--color-noun-blue)] text-white flex items-center justify-center font-bold">
-                                    {p.name[0]}
+                                    {p.name?.[0] || '?'}
                                 </div>
-                                <span className="font-bold">{p.name} {p.id === game.myPlayerId ? '(You)' : ''}</span>
+                                <span className="font-bold">{p.name || 'Unknown'} {p.id === game.myPlayerId ? '(You)' : ''}</span>
                                 {p.isHost && <span className="text-xs bg-[var(--color-func-yellow)] px-2 py-0.5 rounded text-[var(--color-stroke-primary)] border border-black">HOST</span>}
                             </div>
                         ))}
@@ -140,7 +140,7 @@ export default function App() {
                         {role === 'HOST' && (
                             <button
                                 onClick={game.startGame}
-                                disabled={players.length < 2}
+                                disabled={(players?.length || 0) < 2}
                                 className="flex-[2] bg-[var(--color-verb-red)] text-white font-bold py-3 rounded-xl border-2 border-[var(--color-stroke-primary)] shadow-[4px_4px_0_black] active:shadow-none active:translate-y-1 disabled:opacity-50 disabled:shadow-none"
                             >
                                 Start Game
@@ -153,7 +153,14 @@ export default function App() {
     }
 
     // 3. MAIN GAME UI (LOADING)
-    if (!currentPlayer) return <div className="flex h-screen items-center justify-center font-zcool text-2xl animate-pulse">Syncing Table...</div>;
+    if ((mode === 'SANDBOX' || mode === 'LESSON') && (!players || players.length === 0)) {
+        return (
+            <div className="flex flex-col h-screen items-center justify-center bg-[var(--color-bg-canvas)] gap-4">
+                <div className="font-zcool text-4xl animate-pulse text-[var(--color-stroke-primary)]">Syncing Table...</div>
+                <div className="text-sm font-bold opacity-50 uppercase tracking-widest">Waiting for player data</div>
+            </div>
+        );
+    }
 
     // 4. MAIN GAME UI (ACTIVE)
     return (
@@ -179,7 +186,7 @@ export default function App() {
 
                         {/* The Sentence */}
                         <div className="flex flex-wrap justify-center gap-4 py-8 px-4 bg-[var(--color-bg-canvas)] rounded-2xl border-2 border-dashed border-[var(--color-stroke-primary)]/20 w-full">
-                            {game.challengeState.meld.map((card, idx) => (
+                            {game.challengeState?.meld?.map((card, idx) => (
                                 <MahjongTile key={idx} card={card} size="lg" />
                             ))}
                         </div>
@@ -240,13 +247,13 @@ export default function App() {
                                     {/* Vote Status */}
                                     <div className="flex justify-center gap-2">
                                         {game.players?.map(p => {
-                                            const vote = game.challengeState?.votes[p.id];
+                                            const vote = game.challengeState?.votes?.[p.id];
                                             return (
                                                 <div key={p.id} className={`w-8 h-8 rounded-full border-2 border-[var(--color-stroke-primary)] flex items-center justify-center font-bold text-xs
                                                     ${vote === true ? 'bg-[var(--color-adj-green)] text-white' :
                                                         vote === false ? 'bg-[var(--color-verb-red)] text-white' :
                                                             'bg-gray-200 opacity-50'}`}>
-                                                    {p.name[0]}
+                                                    {p.name?.[0] || '?'}
                                                 </div>
                                             );
                                         })}
@@ -321,12 +328,12 @@ export default function App() {
                                     {/* Hand Count */}
                                     <div className="flex items-center gap-1 text-[10px] font-bold bg-[var(--color-stroke-primary)] text-white px-2 py-0.5 rounded-full">
                                         <span>🀄</span>
-                                        <span>{p.hand.length}</span>
+                                        <span>{p.hand?.length || 0}</span>
                                     </div>
                                     {/* Score */}
                                     <div className="flex items-center gap-1 text-[10px] font-bold bg-[var(--color-func-yellow)] text-[var(--color-stroke-primary)] px-2 py-0.5 rounded-full border border-black">
                                         <span>⭐</span>
-                                        <span>{p.score}</span>
+                                        <span>{p.score || 0}</span>
                                     </div>
                                 </div>
                             </div>
@@ -351,7 +358,7 @@ export default function App() {
                         <div className="w-16 h-24 md:w-20 md:h-28 bg-[var(--color-stroke-primary)] rounded-[12px] flex items-center justify-center text-white font-zcool text-xl border-[3px] border-[var(--color-stroke-primary)] shadow-[0_6px_0_rgba(0,0,0,0.2)] transition-transform group-active:translate-y-1 group-active:shadow-none">
                             <div className="flex flex-col items-center">
                                 <span className="text-xl md:text-2xl">🎴</span>
-                                <span className="text-xs md:text-sm mt-1">{game.deck.length}</span>
+                                <span className="text-xs md:text-sm mt-1">{game.deck?.length || 0}</span>
                             </div>
                         </div>
                         <span className="absolute -bottom-6 w-full text-center text-[10px] md:text-xs font-bold uppercase tracking-wider text-[var(--color-stroke-primary)]">Draw</span>
@@ -359,12 +366,12 @@ export default function App() {
 
                     {/* Discard Pile */}
                     <div
-                        className={`relative ${game.phase === 'DRAW' && game.discardPile.length > 0 && isMyTurn ? 'cursor-pointer' : 'cursor-default'}`}
+                        className={`relative ${game.phase === 'DRAW' && (game.discardPile?.length || 0) > 0 && isMyTurn ? 'cursor-pointer' : 'cursor-default'}`}
                         onClick={() => {
                             if (isMyTurn) game.drawFromDiscard();
                         }}
                     >
-                        {game.discardPile.length > 0 ? (
+                        {(game.discardPile?.length || 0) > 0 ? (
                             <div className="relative">
                                 <MahjongTile card={game.discardPile[0]} size="md" />
                                 {game.discardPile.length > 1 && (
@@ -399,9 +406,9 @@ export default function App() {
                                         {p.name}
                                     </div>
                                     <div className="flex flex-col gap-2 mt-2">
-                                        {p.melds.map((meld, mIdx) => (
+                                        {p.melds?.map((meld, mIdx) => (
                                             <div key={mIdx} className="flex gap-1 overflow-x-auto pb-1 justify-center">
-                                                {meld.map((card) => (
+                                                {meld?.map((card) => (
                                                     <MahjongTile key={card.id} card={card} size="sm" />
                                                 ))}
                                             </div>
@@ -425,7 +432,7 @@ export default function App() {
                     <div className="flex gap-4 pointer-events-auto bg-[var(--color-bg-canvas)] p-2 rounded-2xl shadow-xl border-2 border-[var(--color-stroke-primary)]">
                         <button
                             onClick={game.confirmMeld}
-                            disabled={game.selectionQueue.length < 1}
+                            disabled={(game.selectionQueue?.length || 0) < 1}
                             className="bg-[var(--color-verb-red)] text-white px-6 py-2 rounded-xl font-bold border-2 border-[var(--color-stroke-primary)] shadow-[0_4px_0_#A05D49] active:translate-y-1 active:shadow-none disabled:opacity-50 disabled:shadow-none transition-all"
                         >
                             {mode === 'LESSON' ? 'Submit' : 'Meld'}
