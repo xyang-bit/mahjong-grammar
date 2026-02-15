@@ -169,6 +169,9 @@ export const useGameLogic = () => {
             console.log("Attempting to create lobby with ID:", id);
             await set(ref(db, `rooms/${id}`), roomState);
             console.log("Lobby created successfully!");
+
+            // LOCAL STATE INIT (Avoid blank screen before sync)
+            setPlayers(initialPlayers);
             setRoomId(id);
             setRole('HOST');
             setMode('LOBBY');

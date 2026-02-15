@@ -123,8 +123,8 @@ export default function App() {
                     </div>
 
                     <div className="space-y-2">
-                        <div className="text-xs font-bold uppercase opacity-50 text-left">Players ({players.length}/4)</div>
-                        {players.map(p => (
+                        <div className="text-xs font-bold uppercase opacity-50 text-left">Players ({players?.length || 0}/4)</div>
+                        {players?.map(p => (
                             <div key={p.id} className="flex items-center gap-3 p-3 bg-[var(--color-bg-canvas)] rounded-lg border border-[var(--color-stroke-primary)]/20">
                                 <div className="w-8 h-8 rounded-full bg-[var(--color-noun-blue)] text-white flex items-center justify-center font-bold">
                                     {p.name[0]}
@@ -239,7 +239,7 @@ export default function App() {
 
                                     {/* Vote Status */}
                                     <div className="flex justify-center gap-2">
-                                        {game.players.map(p => {
+                                        {game.players?.map(p => {
                                             const vote = game.challengeState?.votes[p.id];
                                             return (
                                                 <div key={p.id} className={`w-8 h-8 rounded-full border-2 border-[var(--color-stroke-primary)] flex items-center justify-center font-bold text-xs
@@ -304,7 +304,7 @@ export default function App() {
 
                 {/* Player Strip */}
                 <div className="flex justify-between items-center px-4 py-2 bg-[var(--color-bg-surface)]/50 overflow-x-auto no-scrollbar gap-2">
-                    {players.map((p, idx) => {
+                    {players?.map((p, idx) => {
                         const isActive = idx === game.currentTurn;
                         return (
                             <div
@@ -391,7 +391,7 @@ export default function App() {
                     </div>
 
                     <div className="flex flex-col gap-6 items-center">
-                        {players.map((p) => {
+                        {players?.map((p) => {
                             if (p.melds.length === 0) return null;
                             return (
                                 <div key={p.id} className="relative bg-white/40 p-3 rounded-2xl border border-[var(--color-stroke-primary)]/10 w-full max-w-2xl">
