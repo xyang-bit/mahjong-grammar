@@ -36,7 +36,22 @@
       color: var(--color-stroke-primary);
       margin: 0;
       overscroll-behavior: none;
-      /* Prevents bounce on mobile PWA */
+    }
+
+    /* Tactile Physics */
+    .tactile-press {
+      transition: transform 0.1s cubic-bezier(0.175, 0.885, 0.32, 1.275), box-shadow 0.1s ease;
+      box-shadow: 0px 6px 0px var(--color-stroke-primary);
+    }
+
+    .tactile-press:active,
+    .tactile-press.is-active {
+      transform: translateY(4px);
+      box-shadow: 0px 2px 0px var(--color-stroke-primary);
+    }
+
+    .hard-shadow {
+      box-shadow: 0px 6px 0px var(--color-stroke-primary);
     }
 
     /* Utility to map types to CSS variables dynamically */

@@ -51,16 +51,15 @@ export const MahjongTile: React.FC<TileProps> = ({ card, onClick, isSelected, si
             className={`
         relative flex flex-col items-center justify-center gap-0.5 p-1
         bg-white border-[3px] border-[var(--color-stroke-primary)]
-        rounded-[12px] cursor-pointer select-none transition-transform duration-100 ease-out overflow-hidden
+        rounded-[12px] cursor-pointer select-none transition-all duration-100 ease-out overflow-hidden
         type-${card.type}
         ${sizeClasses[size]}
-        ${isSelected ? 'ring-4 ring-offset-2 ring-[var(--color-stroke-primary)] -translate-y-4' : 'hover:-translate-y-1 active:translate-y-1 active:shadow-none'}
+        ${isSelected ? 'ring-4 ring-offset-2 ring-[var(--color-stroke-primary)] -translate-y-4' : 'tactile-press hover:-translate-y-1'}
       `}
             style={{
-                // The "Tactile" Hard Shadow logic
                 boxShadow: isSelected
-                    ? '0px 10px 0px var(--tile-accent)'
-                    : '0px 6px 0px var(--tile-accent)',
+                    ? '0px 10px 0px var(--color-stroke-primary)'
+                    : '', // Managed by CSS class
             }}
         >
             {/* Top: Pinyin (Nunito) */}

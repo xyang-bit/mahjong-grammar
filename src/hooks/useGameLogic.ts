@@ -1,12 +1,8 @@
-
-import { useState, useEffect, useRef } from 'react';
-import { CardData, Player, WordType, GameMode, Lesson, NetworkRole, NetworkMessage, SyncStatePayload, ActionPayload, SelectionItem } from '../types';
-import { generateDeck, DECK_MANIFEST, LESSONS, POWER_UP_IDS } from '../constants';
-
-// PeerJS global declaration
-declare var Peer: any;
-
-type Phase = 'DRAW' | 'MELD' | 'DISCARD';
+import { useState, useEffect } from 'react';
+import { CardData, Player, WordType, GameMode, Lesson, NetworkRole, ActionPayload, SelectionItem, Phase, SyncStatePayload } from '../types';
+import { generateDeck, DECK_MANIFEST, LESSONS } from '../constants';
+import { db } from '../firebaseConfig';
+import { ref, onValue, set, push, onChildAdded, remove, update, serverTimestamp } from 'firebase/database';
 
 interface ValidationResult {
     isValid: boolean;
@@ -31,13 +27,9 @@ export const useGameLogic = () => {
 
     // NETWORK STATE
     const [role, setRole] = useState<NetworkRole>('OFFLINE');
-    const [myPeerId, setMyPeerId] = useState<string>('');
+    const [roomId, setRoomId] = useState<string>('');
     const [myPlayerId, setMyPlayerId] = useState<number>(1);
-    const [hostId, setHostId] = useState<string>('');
-
-    const peerRef = useRef<any>(null);
-    const connectionsRef = useRef<any[]>([]);
-    const hostConnectionRef = useRef<any>(null);
+    const [challengeState, setChallengeState] = useState<SyncStatePayload['challenge'] | null>(null);
 
     // Helpers
     const currentPlayer = players[currentTurn];
@@ -62,65 +54,78 @@ export const useGameLogic = () => {
     const validateSandboxMeld = (cards: CardData[]): ValidationResult => {
         if (cards.length < 2) return { isValid: false, error: "Sentence too short (min 2 words)" };
 
-        const hanzis = cards.map(c => c.hanzi);
-        const types = cards.map(c => c.type);
         const lastIdx = cards.length - 1;
 
-        // Definitions
-        const questionWords = ['谁', '什么', '哪里', '为什么', '怎么', '几'];
-        const measureWords = ['岁', '个', '口', '位', '号', '点', '月', '星期'];
-        const numbers = ['两', '几', '一', '二', '三', '四', '五', '六', '七', '八', '九', '十'];
-        const demonstratives = ['这', '那', '哪'];
-        const intensifiers = ['很', '太', '不', '最', '非常'];
-
-        // Verbs that MUST have an object and cannot end a sentence
-        const transitiveVerbs = [
-            '喜欢', '爱', '有', '没有', '叫', '姓', '想', '要', '问', '介绍', '说', '觉得', '找', '给', '带'
-        ];
-
         // 1. Mandatory Predicate Check
-        const hasVerb = types.includes('verb');
-        const hasAdj = types.includes('adj');
-        const hasZai = hanzis.includes('在');
-        const hasShi = hanzis.includes('是');
+        const hasVerb = cards.some(c => c.type === 'verb');
+        const hasAdj = cards.some(c => c.type === 'adj');
+        const hasZai = cards.some(c => c.hanzi === '在');
+        const hasShi = cards.some(c => c.hanzi === '是');
         if (!hasVerb && !hasAdj && !hasZai && !hasShi) {
             return { isValid: false, error: "Missing Action: Every sentence needs a verb or 'is'." };
         }
 
-        // 2. Constituency and Transition Analysis
+        // Iterate through cards for positional checks
         for (let i = 0; i < cards.length; i++) {
-            const current = hanzis[i];
-            const currType = types[i];
-            const prev = i > 0 ? hanzis[i - 1] : null;
+            const card = cards[i];
+            const prev = i > 0 ? cards[i - 1] : null;
 
-            // A. Measure Word/Unit Constraint (Fixes "号 喜欢")
-            // Measure words MUST be preceded by a number or 'this/that'
-            if (measureWords.includes(current)) {
-                if (i === 0 || (!numbers.includes(prev!) && !demonstratives.includes(prev!))) {
-                    return { isValid: false, error: `Grammar: '${current}' is a unit and needs a number before it (e.g. '3号').` };
+            // 2. Measure/Unit Dependency
+            if (card.isUnit) {
+                if (i === 0) {
+                    return { isValid: false, error: `Grammar: Unit '${card.hanzi}' cannot start a sentence.` };
+                }
+                const isNumber = prev?.isNumber || ['一', '二', '三', '四', '五', '六', '七', '八', '九', '十', '几', '两'].includes(prev?.hanzi || '');
+                const isDem = prev?.isDemonstrative || ['这', '那', '哪'].includes(prev?.hanzi || '');
+
+                if (!isNumber && !isDem) {
+                    return { isValid: false, error: `Grammar: Unit '${card.hanzi}' needs a number or 'this/that' before it.` };
                 }
             }
 
-            // B. Negative/Adverb Placement
-            if (['不', '没有', '很'].includes(current) && i === lastIdx) {
-                return { isValid: false, error: `Incomplete: '${current}' cannot end a sentence.` };
+            // 3. Adverb/Negation Positioning & Constituency
+            if (card.isModifier) {
+                // EXCEPTION: '没有' (mei you) can start a sentence (Existential "There is no...")
+                if (i === 0 && card.hanzi !== '没有') {
+                    return { isValid: false, error: `Start Error: Sentences cannot start with modifier '${card.hanzi}'.` };
+                }
+
+                const next = i < cards.length - 1 ? cards[i + 1] : null;
+                const nextType = next?.type;
+
+                // EXCEPTION: '没有' can be followed by a Noun (e.g. "No friends")
+                const allowedFollowers = card.hanzi === '没有' ? ['verb', 'adj', 'noun'] : ['verb', 'adj'];
+
+                if (!next || !allowedFollowers.includes(nextType || '')) {
+                    const errorMsg = card.hanzi === '没有'
+                        ? `Grammar: '没有' must be followed by a Noun, Verb, or Adjective.`
+                        : `Grammar: Modifier '${card.hanzi}' must be followed by a Verb or Adjective.`;
+                    return { isValid: false, error: errorMsg };
+                }
             }
         }
 
-        // 3. Position Logic (Fixes "没有 今天 他")
-        const illegalStarts = ['吗', '了', '的', '过', '呢', '吧', '个', '口', '岁', '位', '号', '点', '也', '都'];
-        if (illegalStarts.includes(hanzis[0])) {
-            return { isValid: false, error: `Start Error: Cannot begin with '${hanzis[0]}'.` };
+        // 4. Transitivity & Termination Logic
+        const lastCard = cards[lastIdx];
+        if (lastCard.isTransitive) {
+            return { isValid: false, error: `Incomplete Thought: Transitive verb '${lastCard.hanzi}' needs an object.` };
         }
 
-        // 4. Transitivity & Termination Logic (Fixes "他 喜欢")
-        if (transitiveVerbs.includes(hanzis[lastIdx])) {
-            return { isValid: false, error: `Incomplete Thought: What does he '${hanzis[lastIdx]}'? Add an object.` };
+        // 5. Semantic Flow (Time/Pronoun Ordering)
+        const timeCards = cards.filter(c => c.isTime);
+        const pronounCards = cards.filter(c => c.isPronoun);
+
+        if (timeCards.length > 0 && pronounCards.length > 0) {
+            const startCard = cards[0];
+            if (!startCard.isTime && !startCard.isPronoun) {
+                return { isValid: false, error: "Word Order: When using Time and Pronoun, one must start the sentence." };
+            }
         }
 
-        // 5. Redundant Question check
-        const hasInterrogative = hanzis.some(h => questionWords.includes(h));
-        const hasMa = hanzis.includes('吗');
+        // 6. Redundant Question check
+        const questionWords = ['谁', '什么', '哪里', '为什么', '怎么', '几'];
+        const hasInterrogative = cards.some(c => questionWords.includes(c.hanzi));
+        const hasMa = cards.some(c => c.hanzi === '吗');
         if (hasInterrogative && hasMa) {
             return { isValid: false, error: "Question Error: Don't use 'who/what' and 'ma' together." };
         }
@@ -130,139 +135,233 @@ export const useGameLogic = () => {
 
     // --- NETWORK LOGIC ---
 
-    useEffect(() => {
-        return () => {
-            if (peerRef.current) peerRef.current.destroy();
+    // Room ID Generator
+    const generateRoomId = () => Math.random().toString(36).substring(2, 6).toUpperCase();
+
+    const createLobby = async (playerName: string) => {
+        const id = generateRoomId();
+        const initialPlayers = [{
+            id: 1,
+            name: playerName + " (Host)",
+            hand: [],
+            melds: [],
+            score: 0,
+            isHost: true
+        }];
+
+        const roomState: any = {
+            state: {
+                players: initialPlayers,
+                deckCount: 0,
+                discardPile: [],
+                currentTurn: 0,
+                phase: 'DRAW',
+                roomLocked: false,
+                lastUpdated: serverTimestamp(),
+                hostId: id // Using roomID as Host reference for simplicity
+            },
+            members: {
+                1: playerName
+            }
         };
-    }, []);
 
-    const createLobby = (playerName: string) => {
-        const peer = new Peer(null, { debug: 2 });
-        peerRef.current = peer;
-
-        peer.on('open', (id: string) => {
-            setMyPeerId(id);
+        try {
+            await set(ref(db, `rooms/${id}`), roomState);
+            setRoomId(id);
             setRole('HOST');
             setMode('LOBBY');
-            setHostId(id);
-            setPlayers([{
-                id: 1,
-                name: playerName + " (Host)",
-                hand: [],
-                melds: [],
-                score: 0,
-                isHost: true,
-                peerId: id
-            }]);
             setMyPlayerId(1);
-        });
-
-        peer.on('connection', (conn: any) => {
-            conn.on('data', (data: NetworkMessage) => {
-                handleHostReceivedData(data, conn);
-            });
-            connectionsRef.current.push(conn);
-        });
-    };
-
-    const joinLobby = (targetHostId: string, playerName: string) => {
-        const peer = new Peer(null, { debug: 2 });
-        peerRef.current = peer;
-
-        peer.on('open', (id: string) => {
-            setMyPeerId(id);
-            setRole('CLIENT');
-            setHostId(targetHostId);
-            setMode('LOBBY');
-            const conn = peer.connect(targetHostId);
-            hostConnectionRef.current = conn;
-
-            conn.on('open', () => {
-                sendToHost({
-                    type: 'JOIN_REQUEST',
-                    payload: { name: playerName, peerId: id }
-                });
-            });
-
-            conn.on('data', (data: NetworkMessage) => {
-                handleClientReceivedData(data);
-            });
-        });
-
-        peer.on('error', (err: any) => {
-            triggerMessage("Connection Error: " + err.type);
-            setMode(null);
-        });
-    };
-
-    const handleHostReceivedData = (msg: NetworkMessage, conn: any) => {
-        if (msg.type === 'JOIN_REQUEST') {
-            const newPlayerId = players.length + 1;
-            const newPlayer: Player = {
-                id: newPlayerId,
-                name: msg.payload.name,
-                peerId: msg.payload.peerId,
-                hand: [],
-                melds: [],
-                score: 0,
-                isHost: false
-            };
-            setPlayers(prev => {
-                const updated = [...prev, newPlayer];
-                setTimeout(() => broadcastState(updated), 100);
-                return updated;
-            });
-            triggerMessage(`${newPlayer.name} joined!`);
-        } else if (msg.type === 'ACTION') {
-            processAction(msg.payload);
+        } catch (err) {
+            triggerMessage("Failed to create room.");
         }
     };
 
-    const handleClientReceivedData = (msg: NetworkMessage) => {
-        if (msg.type === 'SYNC_STATE') {
-            const state: SyncStatePayload = msg.payload;
-            setPlayers(state.players);
-            setDiscardPile(state.discardPile);
-            setCurrentTurn(state.currentTurn);
-            setPhase(state.phase);
-            if (mode === 'LOBBY' && (state.phase === 'DRAW' || state.phase === 'MELD')) {
-                setMode('SANDBOX');
+    const joinLobby = async (targetRoomId: string, playerName: string) => {
+        const id = targetRoomId.toUpperCase();
+        const roomRefObj = ref(db, `rooms/${id}`);
+
+        onValue(roomRefObj, (snapshot) => {
+            const data = snapshot.val();
+            if (!data) {
+                triggerMessage("Room not found!");
+                return;
             }
-            const me = state.players.find(p => p.peerId === myPeerId);
-            if (me) setMyPlayerId(me.id);
-        }
+
+            if (data.state.roomLocked) {
+                triggerMessage("Room is already in progress!");
+                return;
+            }
+
+            const currentPlayers = data.state.players || [];
+            if (currentPlayers.length >= 4) {
+                triggerMessage("Room is full!");
+                return;
+            }
+
+            // If I'm not already in the players list, join
+            const existingPlayer = currentPlayers.find((p: any) => p.name === playerName);
+            if (!existingPlayer && role === 'OFFLINE') {
+                const newPlayerId = currentPlayers.length + 1;
+                const newPlayer: Player = {
+                    id: newPlayerId,
+                    name: playerName,
+                    hand: [],
+                    melds: [],
+                    score: 0,
+                    isHost: false
+                };
+
+                const updatedPlayers = [...currentPlayers, newPlayer];
+                update(ref(db, `rooms/${id}/state`), { players: updatedPlayers });
+                update(ref(db, `rooms/${id}/members`), { [newPlayerId]: playerName });
+
+                setMyPlayerId(newPlayerId);
+                setRoomId(id);
+                setRole('CLIENT');
+                setMode('LOBBY');
+            }
+        }, { onlyOnce: true });
     };
 
-    const broadcastState = (currentPlayers: Player[] = players, currentPhase: Phase = phase, currentTurnIdx: number = currentTurn, currentDiscard: CardData[] = discardPile) => {
-        if (role !== 'HOST') return;
-        const payload: SyncStatePayload = {
+    // HOST AUTHORITY ENGINE
+    useEffect(() => {
+        if (role !== 'HOST' || !roomId) return;
+
+        const actionsRefObj = ref(db, `rooms/${roomId}/actions`);
+        const unsubscribe = onChildAdded(actionsRefObj, (snapshot) => {
+            const actionEntry = snapshot.val();
+            if (actionEntry) {
+                processAction(actionEntry.action, actionEntry.playerId);
+                // Clean up the action after processing
+                remove(ref(db, `rooms/${roomId}/actions/${snapshot.key}`));
+            }
+        });
+
+        return () => unsubscribe();
+    }, [role, roomId, players, deck, discardPile, currentTurn, phase]);
+
+    // CLIENT SYNC ENGINE
+    useEffect(() => {
+        if (!roomId || role === 'OFFLINE') return;
+
+        const stateRef = ref(db, `rooms/${roomId}/state`);
+        const unsubscribe = onValue(stateRef, (snapshot) => {
+            const data = snapshot.val();
+            if (data) {
+                setPlayers(data.players || []);
+                setDeck(new Array(data.deckCount).fill({})); // We don't sync full deck to clients
+                setDiscardPile(data.discardPile || []);
+                setCurrentTurn(data.currentTurn);
+                setPhase(data.phase);
+                setChallengeState(data.challenge || null);
+                if (mode === 'LOBBY' && data.roomLocked) {
+                    setMode('SANDBOX');
+                }
+            }
+        });
+
+        return () => unsubscribe();
+    }, [roomId, mode, role]);
+
+    // HOST TIMER ENGINE (Challenge Window)
+    useEffect(() => {
+        if (role !== 'HOST' || !roomId || phase !== 'CHALLENGE' || !challengeState) return;
+
+        const timer = setInterval(() => {
+            const now = Date.now();
+            if (now >= challengeState.endTime) {
+                clearInterval(timer);
+                if (challengeState.status === 'CHALLENGED') {
+                    resolveChallenge();
+                } else {
+                    finalizeMeld(challengeState.meld);
+                }
+            }
+        }, 500);
+
+        return () => clearInterval(timer);
+    }, [role, roomId, phase, challengeState]);
+
+    const broadcastState = (
+        currentPlayers: Player[],
+        currentPhase: Phase,
+        currentTurnIdx: number,
+        currentDiscard: CardData[],
+        currentDeckLen: number,
+        locked: boolean = true,
+        challenge: SyncStatePayload['challenge'] | null = null
+    ) => {
+        if (role !== 'HOST' || !roomId) return;
+        update(ref(db, `rooms/${roomId}/state`), {
             players: currentPlayers,
-            deckCount: deck.length,
+            deckCount: currentDeckLen,
             discardPile: currentDiscard,
             currentTurn: currentTurnIdx,
-            phase: currentPhase
-        };
-        const msg: NetworkMessage = { type: 'SYNC_STATE', payload };
-        connectionsRef.current.forEach(conn => {
-            if (conn.open) conn.send(msg);
+            phase: currentPhase,
+            roomLocked: locked,
+            lastUpdated: serverTimestamp(),
+            challenge: challenge
         });
-    };
-
-    const sendToHost = (msg: NetworkMessage) => {
-        if (hostConnectionRef.current && hostConnectionRef.current.open) {
-            hostConnectionRef.current.send(msg);
-        }
     };
 
     const dispatchAction = (action: ActionPayload) => {
         if (role === 'CLIENT') {
-            sendToHost({ type: 'ACTION', payload: action });
+            push(ref(db, `rooms/${roomId}/actions`), {
+                playerId: myPlayerId,
+                action: action,
+                timestamp: serverTimestamp()
+            });
+        } else if (role === 'HOST') {
+            processAction(action, myPlayerId);
         } else {
-            processAction(action);
+            processAction(action, myPlayerId);
         }
     };
 
-    const processAction = (action: ActionPayload) => {
+    const finalizeMeld = (cardsToMeld: CardData[]) => {
+        if (role !== 'HOST') return;
+
+        const activePIdx = currentTurn;
+        let newPlayers = [...players];
+        const activeP = newPlayers[activePIdx];
+
+        // POINT CALCULATION V2.0
+        let meldScore = 1;
+        const hasSubj = cardsToMeld.some(c => c.isPronoun || c.type === 'noun');
+        const hasVerb = cardsToMeld.some(c => c.type === 'verb' || c.hanzi === '是' || c.hanzi === '在');
+        const hasObj = cardsToMeld.filter(c => c.type === 'noun' || c.type === 'adj').length >= 1;
+        if (hasSubj && hasVerb && hasObj) meldScore = 3;
+        if (cardsToMeld.some(c => c.isModifier)) meldScore = 5;
+        const particles = ['的', '了', '过', '得'];
+        const particleCount = cardsToMeld.filter(c => particles.includes(c.hanzi)).length;
+        if (particleCount > 0) meldScore *= (Math.pow(2, particleCount));
+
+        activeP.melds = [...activeP.melds, cardsToMeld];
+        activeP.score += meldScore;
+        triggerMessage(`Score Awarded: ${meldScore}pts!`);
+        broadcastState(newPlayers, 'DISCARD', currentTurn, discardPile, deck.length, true, null);
+    };
+
+    const resolveChallenge = () => {
+        if (role !== 'HOST' || !challengeState) return;
+        const votes = Object.values(challengeState.votes);
+        const acceptCount = votes.filter(v => v === true).length;
+        const rejectCount = votes.filter(v => v === false).length;
+        if (acceptCount >= rejectCount) {
+            triggerMessage("Challenge Failed! Meld Accepted.");
+            finalizeMeld(challengeState.meld);
+        } else {
+            triggerMessage("Challenge Successful! Meld Rejected.");
+            let newPlayers = [...players];
+            const activeP = newPlayers[currentTurn];
+            activeP.hand = [...activeP.hand, ...challengeState.meld];
+            broadcastState(newPlayers, 'DISCARD', currentTurn, discardPile, deck.length, true, null);
+        }
+    };
+
+    const processAction = (action: ActionPayload, actorId: number) => {
+        if (role === 'CLIENT') return;
+
         let newPlayers = [...players];
         let newDiscard = [...discardPile];
         let newDeck = [...deck];
@@ -271,6 +370,28 @@ export const useGameLogic = () => {
 
         const activePIdx = currentTurn;
         const activeP = newPlayers[activePIdx];
+
+        // Check for Challenge Actions
+        if (action.actionType === 'CHALLENGE') {
+            if (phase !== 'CHALLENGE' || !challengeState) return;
+            if (actorId === activeP.id) return;
+            const updatedChallenge = {
+                ...challengeState,
+                challengerId: actorId,
+                status: 'CHALLENGED' as const,
+                endTime: Date.now() + 10000
+            };
+            broadcastState(newPlayers, 'CHALLENGE', currentTurn, newDiscard, newDeck.length, true, updatedChallenge);
+            return;
+        }
+
+        if (action.actionType === 'VOTE') {
+            if (phase !== 'CHALLENGE' || !challengeState || challengeState.status !== 'CHALLENGED') return;
+            const updatedVotes = { ...challengeState.votes, [actorId]: action.data as boolean };
+            const updatedChallenge = { ...challengeState, votes: updatedVotes };
+            broadcastState(newPlayers, 'CHALLENGE', currentTurn, newDiscard, newDeck.length, true, updatedChallenge);
+            return;
+        }
 
         switch (action.actionType) {
             case 'DRAW_DECK':
@@ -333,7 +454,6 @@ export const useGameLogic = () => {
 
                     let meldScore = cardsToMeld.length * 20;
 
-                    // Bonus logic
                     const particleList = ['的', '了', '吗', '过', '呢', '得'];
                     let particleCount = 0;
                     cardsToMeld.forEach(c => { if (particleList.includes(c.hanzi)) particleCount++; });
@@ -371,13 +491,15 @@ export const useGameLogic = () => {
                 break;
         }
 
-        setPlayers(newPlayers);
-        setDiscardPile(newDiscard);
-        setDeck(newDeck);
-        setPhase(newPhase);
-        setCurrentTurn(newTurn);
-
-        if (role === 'HOST') broadcastState(newPlayers, newPhase, newTurn, newDiscard);
+        if (role === 'OFFLINE' || mode === 'LESSON') {
+            setPlayers(newPlayers);
+            setDiscardPile(newDiscard);
+            setDeck(newDeck);
+            setPhase(newPhase);
+            setCurrentTurn(newTurn);
+        } else if (role === 'HOST') {
+            broadcastState(newPlayers, newPhase, newTurn, newDiscard, newDeck.length, true);
+        }
     };
 
     const dealLessonHand = (lesson: Lesson, problem: any) => {
@@ -420,6 +542,7 @@ export const useGameLogic = () => {
     };
 
     const startGame = () => {
+        if (role !== 'HOST') return;
         const generatedDeck = generateDeck(80);
         let currentCardIndex = 0;
         const dealtPlayers = players.map(p => {
@@ -427,13 +550,16 @@ export const useGameLogic = () => {
             currentCardIndex += 10;
             return { ...p, hand, score: 0 };
         });
-        setDeck(generatedDeck.slice(currentCardIndex + 1));
-        setDiscardPile([generatedDeck[currentCardIndex]]);
+        const remainingDeck = generatedDeck.slice(currentCardIndex + 1);
+        const initialDiscard = [generatedDeck[currentCardIndex]];
+
+        setDeck(remainingDeck);
+        setDiscardPile(initialDiscard);
         setPlayers(dealtPlayers);
         setPhase('DRAW');
         setCurrentTurn(0);
         setMode('SANDBOX');
-        setTimeout(() => broadcastState(dealtPlayers, 'DRAW', 0, [generatedDeck[currentCardIndex]]), 500);
+        broadcastState(dealtPlayers, 'DRAW', 0, initialDiscard, remainingDeck.length, true, null);
     };
 
     const startOfflineSandbox = () => {
@@ -454,6 +580,8 @@ export const useGameLogic = () => {
     const skipMeld = () => { dispatchAction({ actionType: 'SKIP' }); setSelectionQueue([]); };
     const discardCard = (index: number) => { dispatchAction({ actionType: 'DISCARD', data: index }); setSelectionQueue([]); };
     const sortHand = () => dispatchAction({ actionType: 'SORT' });
+    const challengeMeld = () => dispatchAction({ actionType: 'CHALLENGE' });
+    const voteMeld = (vote: boolean) => dispatchAction({ actionType: 'VOTE', data: vote });
 
     const toggleSelect = (index: number) => {
         setSelectionQueue(prev => {
@@ -469,9 +597,14 @@ export const useGameLogic = () => {
         });
     };
 
-    const exitToMenu = () => { setMode(null); if (peerRef.current) peerRef.current.destroy(); setRole('OFFLINE'); setSelectionQueue([]); };
+    const exitToMenu = () => {
+        setMode(null);
+        setRoomId('');
+        setRole('OFFLINE');
+        setSelectionQueue([]);
+    };
 
     return {
-        mode, activeLesson, currentProblem, currentProblemIndex, players, currentPlayer, currentTurn, deck, discardPile, phase, selectionQueue, message, role, hostId, myPlayerId, myPeerId, myHand, isMyTurn, activeHint, createLobby, joinLobby, startGame, startOfflineSandbox, startLesson, getHint, exitToMenu, drawFromDeck, drawFromDiscard, toggleSelect, togglePowerUp, confirmMeld, skipMeld, discardCard, sortHand, triggerMessage, setSelectionQueue
+        mode, activeLesson, currentProblem, currentProblemIndex, players, currentPlayer, currentTurn, deck, discardPile, phase, selectionQueue, message, role, roomId, myPlayerId, myHand, isMyTurn, activeHint, challengeState, createLobby, joinLobby, startGame, startOfflineSandbox, startLesson, getHint, exitToMenu, drawFromDeck, drawFromDiscard, toggleSelect, togglePowerUp, confirmMeld, skipMeld, discardCard, sortHand, triggerMessage, setSelectionQueue, challengeMeld, voteMeld
     };
 };

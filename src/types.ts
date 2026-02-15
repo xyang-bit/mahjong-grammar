@@ -8,6 +8,14 @@ export interface CardData {
     en: string;
     type: WordType;
     tier: 'core' | 'lesson';
+    // Grammatical Attributes
+    isTransitive?: boolean;
+    isUnit?: boolean;
+    isTime?: boolean;
+    isPronoun?: boolean;
+    isModifier?: boolean; // Adverbs, Negation
+    isNumber?: boolean;
+    isDemonstrative?: boolean;
 }
 
 export interface Player {
@@ -41,16 +49,43 @@ export interface Lesson {
 
 // NETWORK PAYLOADS
 export interface NetworkMessage {
-    type: 'JOIN_REQUEST' | 'SYNC_STATE' | 'ACTION';
+    type: 'JOIN_REQUEST' | 'SYNC_STATE' | 'ACTION' | 'HEARTBEAT';
     payload: any;
 }
+
+export type Phase = 'DRAW' | 'MELD' | 'DISCARD' | 'CHALLENGE' | 'RESOLUTION';
 
 export interface SyncStatePayload {
     players: Player[];
     deckCount: number;
     discardPile: CardData[];
     currentTurn: number;
-    phase: 'DRAW' | 'MELD' | 'DISCARD';
+    phase: Phase;
+    roomLocked: boolean;
+    challenge?: {
+        meld: CardData[];
+        challengerId?: number;
+        votes: { [playerId: number]: boolean }; // true = accept, false = reject
+        endTime: number;
+        status: 'PENDING' | 'CHALLENGED';
+    };
+}
+
+export interface RoomState {
+    state: SyncStatePayload & {
+        lastUpdated: number;
+        hostId: string;
+    };
+    actions: {
+        [key: string]: {
+            playerId: number;
+            action: ActionPayload;
+            timestamp: number;
+        };
+    };
+    members: {
+        [playerId: number]: string; // playerId -> playerName
+    };
 }
 
 export interface SelectionItem {
@@ -59,6 +94,6 @@ export interface SelectionItem {
 }
 
 export interface ActionPayload {
-    actionType: 'DRAW_DECK' | 'DRAW_DISCARD' | 'MELD' | 'SKIP' | 'DISCARD' | 'SORT';
-    data?: any; // index, or SelectionItem[]
+    actionType: 'DRAW_DECK' | 'DRAW_DISCARD' | 'MELD' | 'SKIP' | 'DISCARD' | 'SORT' | 'CHALLENGE' | 'VOTE';
+    data?: any; // index, SelectionItem[], or vote boolean
 }

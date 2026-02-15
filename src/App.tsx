@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { MahjongTile } from './components/MahjongTile';
 import { useGameLogic } from './hooks/useGameLogic';
 import { LESSONS, DECK_MANIFEST, POWER_UP_IDS, BASIC_SHELF_IDS } from './constants';
@@ -110,7 +110,7 @@ export default function App() {
                         {role === 'HOST' ? (
                             <div className="bg-[var(--color-func-yellow)] p-4 rounded-xl border-2 border-[var(--color-stroke-primary)] border-dashed">
                                 <div className="text-xs uppercase font-bold opacity-60">Room Code</div>
-                                <div className="text-4xl font-mono font-bold tracking-widest select-all">{game.myPeerId}</div>
+                                <div className="text-4xl font-mono font-bold tracking-widest select-all">{game.roomId}</div>
                                 <div className="text-xs mt-2 opacity-60">Share this code with players on other iPads</div>
                             </div>
                         ) : (
@@ -159,9 +159,99 @@ export default function App() {
 
             {/* GLOBAL TOAST MESSAGE - Updated for better centering and overflow prevention */}
             {game.message && (
-                <div className="fixed top-28 left-0 right-0 z-50 flex justify-center pointer-events-none px-4 md:px-12 animate-in slide-in-from-top-4">
-                    <div className="bg-[var(--color-stroke-primary)] text-white px-8 py-3 rounded-2xl font-bold shadow-2xl border-2 border-white text-center max-w-lg">
+                <div className="fixed top-28 left-1/2 -translate-x-1/2 z-50 flex justify-center pointer-events-none w-full px-4 animate-in slide-in-from-top-4">
+                    <div className="bg-[var(--color-stroke-primary)] text-white px-6 py-3 rounded-2xl font-bold shadow-2xl border-2 border-white text-center w-auto max-w-[90vw]">
                         {game.message}
+                    </div>
+                </div>
+            )}
+
+            {/* CHALLENGE WINDOW */}
+            {game.phase === 'CHALLENGE' && game.challengeState && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[var(--color-bg-canvas)]/90 backdrop-blur-sm p-4 animate-in fade-in duration-300">
+                    <div className="bg-white w-full max-w-2xl rounded-3xl border-4 border-[var(--color-stroke-primary)] shadow-[0_12px_0_var(--color-stroke-primary)] p-8 flex flex-col items-center space-y-8">
+                        <div className="text-center space-y-2">
+                            <h2 className="text-2xl font-bold uppercase tracking-widest text-[var(--color-verb-red)]">Challenge Window</h2>
+                            <p className="font-bold opacity-60">Is this a valid Chinese sentence?</p>
+                        </div>
+
+                        {/* The Sentence */}
+                        <div className="flex flex-wrap justify-center gap-4 py-8 px-4 bg-[var(--color-bg-canvas)] rounded-2xl border-2 border-dashed border-[var(--color-stroke-primary)]/20 w-full">
+                            {game.challengeState.meld.map((card, idx) => (
+                                <MahjongTile key={idx} card={card} size="lg" />
+                            ))}
+                        </div>
+
+                        {/* Timer */}
+                        <div className="flex flex-col items-center gap-2">
+                            <div className="w-64 h-4 bg-[var(--color-bg-canvas)] rounded-full border-2 border-[var(--color-stroke-primary)] overflow-hidden">
+                                <div
+                                    className="h-full bg-[var(--color-verb-red)] transition-all duration-500"
+                                    style={{ width: `${Math.max(0, (game.challengeState.endTime - Date.now()) / 5000) * 100}%` }}
+                                />
+                            </div>
+                            <div className="text-sm font-bold opacity-50">Auto-accepting soon...</div>
+                        </div>
+
+                        {/* Peer Review Controls */}
+                        <div className="w-full flex flex-col gap-4">
+                            {game.challengeState.status === 'PENDING' ? (
+                                <div className="flex justify-center">
+                                    {game.myPlayerId !== game.players[game.currentTurn].id ? (
+                                        <button
+                                            onClick={game.challengeMeld}
+                                            className="bg-[var(--color-verb-red)] text-white px-12 py-4 rounded-2xl border-2 border-[var(--color-stroke-primary)] shadow-[0_6px_0_var(--color-stroke-primary)] active:shadow-none active:translate-y-1 font-bold text-xl hover:brightness-110 transition-all"
+                                        >
+                                            Challenge!
+                                        </button>
+                                    ) : (
+                                        <div className="text-[var(--color-noun-blue)] font-bold animate-pulse">Waiting for peer review...</div>
+                                    )}
+                                </div>
+                            ) : (
+                                <div className="space-y-6 w-full">
+                                    <div className="text-center font-bold text-xl text-[var(--color-verb-red)] animate-bounce italic">
+                                        SENTENCE CHALLENGED!
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <button
+                                            onClick={() => game.voteMeld(true)}
+                                            className={`py-6 rounded-2xl border-2 border-[var(--color-stroke-primary)] font-bold text-xl transition-all
+                                                ${game.challengeState.votes[game.myPlayerId] === true
+                                                    ? 'bg-[var(--color-adj-green)] text-white shadow-none translate-y-1'
+                                                    : 'bg-white shadow-[0_6px_0_var(--color-stroke-primary)] hover:brightness-95'}`}
+                                        >
+                                            Accept (Valid)
+                                        </button>
+                                        <button
+                                            onClick={() => game.voteMeld(false)}
+                                            className={`py-6 rounded-2xl border-2 border-[var(--color-stroke-primary)] font-bold text-xl transition-all
+                                                ${game.challengeState.votes[game.myPlayerId] === false
+                                                    ? 'bg-[var(--color-verb-red)] text-white shadow-none translate-y-1'
+                                                    : 'bg-white shadow-[0_6px_0_var(--color-stroke-primary)] hover:brightness-95'}`}
+                                        >
+                                            Reject (Error)
+                                        </button>
+                                    </div>
+
+                                    {/* Vote Status */}
+                                    <div className="flex justify-center gap-2">
+                                        {game.players.map(p => {
+                                            const vote = game.challengeState?.votes[p.id];
+                                            return (
+                                                <div key={p.id} className={`w-8 h-8 rounded-full border-2 border-[var(--color-stroke-primary)] flex items-center justify-center font-bold text-xs
+                                                    ${vote === true ? 'bg-[var(--color-adj-green)] text-white' :
+                                                        vote === false ? 'bg-[var(--color-verb-red)] text-white' :
+                                                            'bg-gray-200 opacity-50'}`}>
+                                                    {p.name[0]}
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
                     </div>
                 </div>
             )}
@@ -196,7 +286,7 @@ export default function App() {
                     ) : (
                         <div className="flex flex-col items-center">
                             <h1 className="font-zcool text-xl text-[var(--color-stroke-primary)]">麻将中文</h1>
-                            {role !== 'OFFLINE' && <span className="text-[10px] opacity-50 font-bold">Room: {role === 'HOST' ? game.myPeerId : game.hostId}</span>}
+                            {role !== 'OFFLINE' && <span className="text-[10px] opacity-50 font-bold">Room: {game.roomId}</span>}
                         </div>
                     )}
 
