@@ -153,7 +153,7 @@ export default function App() {
     }
 
     // 3. MAIN GAME UI (LOADING)
-    if ((mode === 'SANDBOX' || mode === 'LESSON') && (!players || players.length === 0)) {
+    if ((mode === 'SANDBOX' || mode === 'LESSON' || mode === 'LOBBY') && (!players || players.length === 0)) {
         return (
             <div className="flex flex-col h-screen items-center justify-center bg-[var(--color-bg-canvas)] gap-4">
                 <div className="font-zcool text-4xl animate-pulse text-[var(--color-stroke-primary)]">Syncing Table...</div>
