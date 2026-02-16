@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { CardData, Player, WordType, GameMode, Lesson, NetworkRole, ActionPayload, SelectionItem, Phase, SyncStatePayload } from '../types';
 import { generateDeck, DECK_MANIFEST, LESSONS } from '../constants';
 import { db } from '../firebaseConfig';
@@ -298,22 +298,25 @@ export const useGameLogic = () => {
     useEffect(() => {
         if (role !== 'HOST' || !roomId || phase !== 'CHALLENGE' || !challengeState) return;
 
-        const timer = setInterval(() => {
-            const now = Date.now();
-            if (now >= challengeState.endTime) {
-                clearInterval(timer);
-                if (challengeState.status === 'CHALLENGED') {
-                    resolveChallenge();
-                } else {
-                    finalizeMeld(challengeState.meld);
-                }
+        const remainingMs = challengeState.endTime - Date.now();
+        console.log(`[Host] Challenge timer started. Ends in ${remainingMs}ms`);
+
+        const timer = setTimeout(() => {
+            console.log("[Host] Challenge window expired. Finalizing state...");
+            if (challengeState.status === 'CHALLENGED') {
+                resolveChallenge();
+            } else {
+                finalizeMeld(challengeState.meld);
             }
-        }, 500);
+        }, Math.max(0, remainingMs));
 
-        return () => clearInterval(timer);
-    }, [role, roomId, phase, challengeState]);
+        return () => {
+            console.log("[Host] Cleaning up challenge timer");
+            clearTimeout(timer);
+        };
+    }, [role, roomId, phase, challengeState, players, currentTurn, discardPile, deck.length]);
 
-    const broadcastState = (
+    const broadcastState = useCallback((
         currentPlayers: Player[],
         currentPhase: Phase,
         currentTurnIdx: number,
@@ -323,6 +326,7 @@ export const useGameLogic = () => {
         challenge: SyncStatePayload['challenge'] | null = null
     ) => {
         if (role !== 'HOST' || !roomId) return;
+        console.log(`[Host] Broadcasting State: Phase=${currentPhase}, Turn=${currentTurnIdx}`);
         update(ref(db, `rooms/${roomId}/state`), {
             players: currentPlayers,
             deckCount: currentDeckLen,
@@ -333,7 +337,7 @@ export const useGameLogic = () => {
             lastUpdated: serverTimestamp(),
             challenge: challenge
         });
-    };
+    }, [role, roomId]);
 
     const dispatchAction = (action: ActionPayload) => {
         if (role === 'CLIENT') {
@@ -349,12 +353,18 @@ export const useGameLogic = () => {
         }
     };
 
-    const finalizeMeld = (cardsToMeld: CardData[]) => {
+    const finalizeMeld = useCallback((cardsToMeld: CardData[]) => {
         if (role !== 'HOST') return;
 
+        console.log("[Host] Finalizing Meld:", cardsToMeld.map(c => c.hanzi).join(''));
         const activePIdx = currentTurn;
         let newPlayers = [...players];
         const activeP = newPlayers[activePIdx];
+
+        if (!activeP) {
+            console.error("[Host] No active player found at index", activePIdx);
+            return;
+        }
 
         const meldScore = calculateMeldScore(cardsToMeld);
 
@@ -364,13 +374,16 @@ export const useGameLogic = () => {
 
         // Move to Discard phase after successful meld
         broadcastState(newPlayers, 'DISCARD', currentTurn, discardPile, deck.length, true, null);
-    };
+    }, [role, currentTurn, players, discardPile, deck, broadcastState]);
 
-    const resolveChallenge = () => {
+    const resolveChallenge = useCallback(() => {
         if (role !== 'HOST' || !challengeState) return;
         const votes = Object.values(challengeState.votes);
         const acceptCount = votes.filter(v => v === true).length;
         const rejectCount = votes.filter(v => v === false).length;
+
+        console.log(`[Host] Resolving Challenge: Accept(${acceptCount}) vs Reject(${rejectCount})`);
+
         if (acceptCount >= rejectCount) {
             triggerMessage("Challenge Failed! Meld Accepted.");
             finalizeMeld(challengeState.meld);
@@ -378,10 +391,12 @@ export const useGameLogic = () => {
             triggerMessage("Challenge Successful! Meld Rejected.");
             let newPlayers = [...players];
             const activeP = newPlayers[currentTurn];
-            activeP.hand = [...activeP.hand, ...challengeState.meld];
+            if (activeP) {
+                activeP.hand = [...activeP.hand, ...challengeState.meld];
+            }
             broadcastState(newPlayers, 'DISCARD', currentTurn, discardPile, deck.length, true, null);
         }
-    };
+    }, [role, challengeState, players, currentTurn, discardPile, deck, broadcastState, finalizeMeld]);
 
     const processAction = (action: ActionPayload, actorId: number) => {
         if (role === 'CLIENT') return;

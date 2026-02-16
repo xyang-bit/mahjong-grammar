@@ -203,7 +203,7 @@ export default function App() {
                             <div className="w-64 h-4 bg-[var(--color-bg-canvas)] rounded-full border-2 border-[var(--color-stroke-primary)] overflow-hidden">
                                 <div
                                     className="h-full bg-[var(--color-verb-red)] transition-all duration-500"
-                                    style={{ width: `${Math.max(0, (game.challengeState.endTime - Date.now()) / 5000) * 100}%` }}
+                                    style={{ width: `${Math.max(0, (game.challengeState.endTime - Date.now()) / (game.challengeState.status === 'CHALLENGED' ? 10000 : 5000)) * 100}%` }}
                                 />
                             </div>
                             <div className="text-sm font-bold opacity-50">Auto-accepting soon...</div>
