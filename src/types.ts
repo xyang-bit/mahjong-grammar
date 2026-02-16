@@ -64,7 +64,7 @@ export interface SyncStatePayload {
     roomLocked: boolean;
     challenge?: {
         meld: CardData[];
-        challengerId?: number;
+        challengerId?: number | null;
         votes: { [playerId: number]: boolean }; // true = accept, false = reject
         endTime: number;
         status: 'PENDING' | 'CHALLENGED';

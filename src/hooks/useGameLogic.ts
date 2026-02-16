@@ -464,7 +464,7 @@ export const useGameLogic = () => {
 
                         const challenge: SyncStatePayload['challenge'] = {
                             meld: cardsToMeld,
-                            challengerId: undefined,
+                            challengerId: null,
                             status: 'PENDING',
                             endTime: Date.now() + 5000, // 5-second window for peers to challenge
                             votes: {}
