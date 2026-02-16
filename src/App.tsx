@@ -102,6 +102,19 @@ export default function App() {
         )
     }
 
+    // 1.5 GLOBAL LOADING GUARD
+    if ((mode === 'SANDBOX' || mode === 'LESSON' || mode === 'LOBBY') && (!players || players.length === 0)) {
+        const loadingMessage = mode === 'LOBBY' ? 'Initializing Room...' : 'Syncing Table...';
+        return (
+            <div className="flex flex-col h-screen items-center justify-center bg-[var(--color-bg-canvas)] gap-4">
+                <div className="font-zcool text-4xl animate-pulse text-[var(--color-stroke-primary)]">{loadingMessage}</div>
+                <div className="text-sm font-bold opacity-50 uppercase tracking-widest text-[var(--color-stroke-primary)]/50">
+                    {mode === 'LOBBY' ? 'Preparing your session' : 'Waiting for player data'}
+                </div>
+            </div>
+        );
+    }
+
     // 2. LOBBY STATE
     if (mode === 'LOBBY') {
         return (
@@ -148,16 +161,6 @@ export default function App() {
                         )}
                     </div>
                 </div>
-            </div>
-        );
-    }
-
-    // 3. MAIN GAME UI (LOADING)
-    if ((mode === 'SANDBOX' || mode === 'LESSON' || mode === 'LOBBY') && (!players || players.length === 0)) {
-        return (
-            <div className="flex flex-col h-screen items-center justify-center bg-[var(--color-bg-canvas)] gap-4">
-                <div className="font-zcool text-4xl animate-pulse text-[var(--color-stroke-primary)]">Syncing Table...</div>
-                <div className="text-sm font-bold opacity-50 uppercase tracking-widest">Waiting for player data</div>
             </div>
         );
     }
