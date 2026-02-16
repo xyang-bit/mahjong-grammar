@@ -27,14 +27,18 @@ export default function App() {
                 <div className="main-menu-card flex flex-col gap-6 w-full max-w-md bg-white p-6 shadow-xl">
                     {/* Name Input */}
                     <div>
-                        <label className="block text-xs font-bold uppercase text-[var(--color-stroke-primary)] mb-1">Your Name</label>
-                        <input
-                            type="text"
-                            value={playerName}
-                            onChange={(e) => setPlayerName(e.target.value)}
-                            placeholder="Enter Name..."
-                            className="w-full bg-[var(--color-bg-canvas)] border-2 border-[var(--color-stroke-primary)] rounded-lg p-3 font-bold focus:outline-none focus:ring-2 focus:ring-[var(--color-noun-blue)]"
-                        />
+                        <label className="block text-xs font-bold uppercase text-[var(--color-stroke-primary)] mb-1">
+                            Your Name
+                            <input
+                                name="playerName"
+                                id="playerName"
+                                type="text"
+                                value={playerName}
+                                onChange={(e) => setPlayerName(e.target.value)}
+                                placeholder="Enter Name..."
+                                className="w-full bg-[var(--color-bg-canvas)] border-2 border-[var(--color-stroke-primary)] rounded-lg p-3 font-bold focus:outline-none focus:ring-2 focus:ring-[var(--color-noun-blue)] mt-1"
+                            />
+                        </label>
                     </div>
 
                     <div className="h-[2px] bg-[var(--color-stroke-primary)] opacity-10 w-full"></div>
@@ -377,7 +381,7 @@ export default function App() {
                         {(game.discardPile?.length || 0) > 0 ? (
                             <div className="relative">
                                 <MahjongTile card={game.discardPile[0]} size="md" />
-                                {game.discardPile.length > 1 && (
+                                {(game.discardPile?.length || 0) > 1 && (
                                     <div className="absolute top-1 left-1 w-full h-full bg-white border-[3px] border-[var(--color-stroke-primary)] rounded-[12px] -z-10" />
                                 )}
                             </div>
@@ -402,11 +406,11 @@ export default function App() {
 
                     <div className="flex flex-col gap-6 items-center">
                         {players?.map((p) => {
-                            if (p.melds.length === 0) return null;
+                            if ((p?.melds?.length || 0) === 0) return null;
                             return (
-                                <div key={p.id} className="relative bg-white/40 p-3 rounded-2xl border border-[var(--color-stroke-primary)]/10 w-full max-w-2xl">
+                                <div key={p?.id || Math.random()} className="relative bg-white/40 p-3 rounded-2xl border border-[var(--color-stroke-primary)]/10 w-full max-w-2xl">
                                     <div className="absolute -top-3 left-3 bg-[var(--color-stroke-primary)] text-white text-[10px] px-2 py-0.5 rounded-full font-bold">
-                                        {p.name}
+                                        {p?.name || 'Unknown'}
                                     </div>
                                     <div className="flex flex-col gap-2 mt-2">
                                         {p.melds?.map((meld, mIdx) => (
@@ -454,7 +458,7 @@ export default function App() {
             {!isMyTurn && (
                 <div className="fixed bottom-80 w-full text-center pointer-events-none z-30">
                     <span className="bg-white/80 backdrop-blur text-[var(--color-stroke-primary)] px-4 py-2 rounded-full font-bold text-sm border border-[var(--color-stroke-primary)]">
-                        Waiting for {currentPlayer.name}...
+                        Waiting for {currentPlayer?.name || 'Connecting...'}...
                     </span>
                 </div>
             )}
@@ -555,10 +559,10 @@ export default function App() {
 
                 <div className="w-full overflow-x-auto pb-6 px-4 no-scrollbar">
                     <div className="flex gap-2 md:gap-4 min-w-max mx-auto px-4 justify-center">
-                        {myHand.map((card, index) => {
-                            const isSelected = game.selectionQueue.some(item => item.type === 'HAND' && item.identifier === index);
+                        {myHand?.map((card, index) => {
+                            const isSelected = game.selectionQueue?.some(item => item.type === 'HAND' && item.identifier === index);
                             return (
-                                <div key={card.id} className="relative pt-4 transition-all duration-300">
+                                <div key={card?.id || index} className="relative pt-4 transition-all duration-300">
                                     {/* Order Indicator */}
                                     {isSelected && (
                                         <div className="absolute -top-4 left-1/2 -translate-x-1/2 bg-[var(--color-stroke-primary)] text-white text-[10px] px-1.5 rounded-full z-50">
