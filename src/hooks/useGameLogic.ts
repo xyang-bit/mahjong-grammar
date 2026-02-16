@@ -51,6 +51,31 @@ export const useGameLogic = () => {
     };
 
     // --- ENHANCED GRAMMAR VALIDATION ENGINE ---
+    const calculateMeldScore = (cards: CardData[]) => {
+        let score = 5; // Base score for any valid meld
+        const fullSentence = cards.map(c => c.hanzi).join('');
+
+        // Grammar Complexity Bonuses
+        const hasSubj = cards.some(c => c.isPronoun || c.type === 'noun');
+        const hasVerb = cards.some(c => c.type === 'verb' || c.hanzi === '是' || c.hanzi === '在');
+        const hasObj = cards.filter(c => c.type === 'noun' || c.type === 'adj').length >= 1;
+
+        if (hasSubj && hasVerb && hasObj) score += 15; // Complete Sentence Bonus
+        if (cards.some(c => c.isModifier)) score += 10; // Adjective/Adverb usage
+
+        // Particle Multipliers (的, 了, 过, 得)
+        const particles = ['的', '了', '过', '得'];
+        const particleCount = cards.filter(c => particles.includes(c.hanzi)).length;
+        if (particleCount > 0) score *= (Math.pow(2, particleCount));
+
+        // Connector Multiplier (Multi-clause sentences)
+        const hasConnectors = (fullSentence.includes('因为') && fullSentence.includes('所以')) ||
+            (fullSentence.includes('虽然') && fullSentence.includes('但是'));
+        if (hasConnectors) score *= 2;
+
+        return score;
+    };
+
     const validateSandboxMeld = (cards: CardData[]): ValidationResult => {
         if (cards.length < 2) return { isValid: false, error: "Sentence too short (min 2 words)" };
 
@@ -331,20 +356,13 @@ export const useGameLogic = () => {
         let newPlayers = [...players];
         const activeP = newPlayers[activePIdx];
 
-        // POINT CALCULATION V2.0
-        let meldScore = 1;
-        const hasSubj = cardsToMeld.some(c => c.isPronoun || c.type === 'noun');
-        const hasVerb = cardsToMeld.some(c => c.type === 'verb' || c.hanzi === '是' || c.hanzi === '在');
-        const hasObj = cardsToMeld.filter(c => c.type === 'noun' || c.type === 'adj').length >= 1;
-        if (hasSubj && hasVerb && hasObj) meldScore = 3;
-        if (cardsToMeld.some(c => c.isModifier)) meldScore = 5;
-        const particles = ['的', '了', '过', '得'];
-        const particleCount = cardsToMeld.filter(c => particles.includes(c.hanzi)).length;
-        if (particleCount > 0) meldScore *= (Math.pow(2, particleCount));
+        const meldScore = calculateMeldScore(cardsToMeld);
 
         activeP.melds = [...activeP.melds, cardsToMeld];
         activeP.score += meldScore;
         triggerMessage(`Score Awarded: ${meldScore}pts!`);
+
+        // Move to Discard phase after successful meld
         broadcastState(newPlayers, 'DISCARD', currentTurn, discardPile, deck.length, true, null);
     };
 
@@ -471,34 +489,18 @@ export const useGameLogic = () => {
                         };
 
                         // Transition to CHALLENGE phase and wait
+                        newPhase = 'CHALLENGE';
                         broadcastState(newPlayers, 'CHALLENGE', currentTurn, newDiscard, newDeck.length, true, challenge);
+                        return; // IMPORTANT: Prevent final broadcastState from overwriting the challenge
                     } else {
                         // Offline or Solo Sandbox: Award points immediately
+                        const meldScore = calculateMeldScore(cardsToMeld);
                         activeP.melds = [...activeP.melds, cardsToMeld];
                         activeP.hand = activeP.hand.filter((_, i) => !indicesToRemove.includes(i));
-
-                        // Point Calculation Logic
-                        let meldScore = cardsToMeld.length * 20;
-                        const fullSentence = cardsToMeld.map(c => c.hanzi).join('');
-                        const particleList = ['的', '了', '吗', '过', '呢', '得'];
-                        let particleCount = 0;
-                        cardsToMeld.forEach(c => { if (particleList.includes(c.hanzi)) particleCount++; });
-                        meldScore += (particleCount * 10);
-
-                        const hasConnectors = (fullSentence.includes('因为') && fullSentence.includes('所以')) ||
-                            (fullSentence.includes('虽然') && fullSentence.includes('但是'));
-                        if (hasConnectors) meldScore *= 2;
-
                         activeP.score += meldScore;
-                        if (hasConnectors) triggerMessage(`👑 Multi-clause Bonus! +${meldScore}pts`);
-                        else triggerMessage(`✅ Correct Construction! +${meldScore}pts`);
 
-                        if (role === 'HOST') {
-                            broadcastState(newPlayers, 'DISCARD', currentTurn, newDiscard, newDeck.length);
-                        } else {
-                            setPlayers(newPlayers);
-                            setPhase('DISCARD');
-                        }
+                        triggerMessage(`✅ Correct Construction! +${meldScore}pts`);
+                        newPhase = 'DISCARD';
                     }
                 }
                 break;
