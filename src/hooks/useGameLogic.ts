@@ -32,9 +32,9 @@ export const useGameLogic = () => {
     const [challengeState, setChallengeState] = useState<SyncStatePayload['challenge'] | null>(null);
 
     // Helpers
-    const currentPlayer = players[currentTurn] || { name: 'Connecting...', hand: [], melds: [], id: -1, score: 0, isHost: false } as Player;
-    const isMyTurn = role === 'OFFLINE' || (players[currentTurn]?.id === myPlayerId);
-    const myHand = players.find(p => p.id === myPlayerId)?.hand || [];
+    const currentPlayer = players?.[currentTurn] || { name: 'Connecting...', hand: [], melds: [], id: -1, score: 0, isHost: false } as Player;
+    const isMyTurn = role === 'OFFLINE' || (players?.[currentTurn]?.id === myPlayerId);
+    const myHand = players?.find(p => p.id === myPlayerId)?.hand || [];
     const currentProblem = activeLesson ? activeLesson.problems[currentProblemIndex] : null;
 
     let activeHint = "";
