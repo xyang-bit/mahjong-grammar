@@ -280,7 +280,11 @@ export const useGameLogic = () => {
             const data = snapshot.val();
             if (data) {
                 setPlayers(data.players || []);
-                setDeck(new Array(data.deckCount).fill({})); // We don't sync full deck to clients
+                // CRITICAL: Only clients should update local deck from sync data
+                // The HOST is the source of truth and must keep the full deck data
+                if (role === 'CLIENT') {
+                    setDeck(new Array(data.deckCount).fill({}));
+                }
                 setDiscardPile(data.discardPile || []);
                 setCurrentTurn(data.currentTurn);
                 setPhase(data.phase);
@@ -350,18 +354,19 @@ export const useGameLogic = () => {
         const cardsNeeded = 11 - (activeP.hand?.length || 0);
 
         let newHand = activeP.hand ? activeP.hand.filter(c => !cardsToMeld.includes(c)) : [];
-        if (cardsNeeded <= 0) {
-            // No cards needed, just update hand with removed meld cards
-        } else {
-            const rawDrawnCards = currentDeck.slice(0, cardsNeeded);
-            const validDrawnCards = rawDrawnCards.map(tile => {
-                if (tile && !(tile.hanzi || (tile as any).char || (tile as any).character)) {
-                    tile.hanzi = tile.hanzi || '?';
-                }
-                return tile;
-            }).filter(tile => tile && (tile.hanzi || (tile as any).char || (tile as any).character));
+        if (cardsNeeded > 0) {
+            const drawnCards = currentDeck.slice(0, cardsNeeded);
 
-            console.log('Refilling hand with:', validDrawnCards);
+            // Verify Tile Structure: Ensure the deck data actually exists
+            const validDrawnCards = drawnCards.filter(tile => {
+                const isValid = tile && tile.hanzi && tile.pinyin && tile.type;
+                if (!isValid) {
+                    console.error("[Host] Detected corrupted/empty tile in deck during refill:", tile);
+                }
+                return isValid;
+            });
+
+            console.log('[Host] Refilling hand with drawn cards:', validDrawnCards);
 
             newHand = [...newHand, ...validDrawnCards];
             currentDeck = currentDeck.slice(cardsNeeded);
