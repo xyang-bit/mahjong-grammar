@@ -294,27 +294,6 @@ export const useGameLogic = () => {
         return () => unsubscribe();
     }, [roomId, mode, role]);
 
-    // HOST TIMER ENGINE (Challenge Window)
-    useEffect(() => {
-        if (role !== 'HOST' || !roomId || phase !== 'CHALLENGE' || !challengeState) return;
-
-        const remainingMs = challengeState.endTime - Date.now();
-        console.log(`[Host] Challenge timer started. Ends in ${remainingMs}ms`);
-
-        const timer = setTimeout(() => {
-            console.log("[Host] Challenge window expired. Finalizing state...");
-            if (challengeState.status === 'CHALLENGED') {
-                resolveChallenge();
-            } else {
-                finalizeMeld(challengeState.meld);
-            }
-        }, Math.max(0, remainingMs));
-
-        return () => {
-            console.log("[Host] Cleaning up challenge timer");
-            clearTimeout(timer);
-        };
-    }, [role, roomId, phase, challengeState, players, currentTurn, discardPile, deck.length]);
 
     const broadcastState = useCallback((
         currentPlayers: Player[],
@@ -326,17 +305,21 @@ export const useGameLogic = () => {
         challenge: SyncStatePayload['challenge'] | null = null
     ) => {
         if (role !== 'HOST' || !roomId) return;
-        console.log(`[Host] Broadcasting State: Phase=${currentPhase}, Turn=${currentTurnIdx}`);
-        update(ref(db, `rooms/${roomId}/state`), {
-            players: currentPlayers,
+
+        // Clean payload of undefined values for Firebase
+        const cleanPayload = JSON.parse(JSON.stringify({
+            players: [...currentPlayers],
             deckCount: currentDeckLen,
             discardPile: currentDiscard,
             currentTurn: currentTurnIdx,
             phase: currentPhase,
             roomLocked: locked,
-            lastUpdated: serverTimestamp(),
+            lastUpdated: Date.now(), // Fallback to Date.now if serverTimestamp is tricky in nested updates
             challenge: challenge
-        });
+        }));
+
+        console.log(`[Host] Broadcasting State: Phase=${currentPhase}, Turn=${currentTurnIdx}`);
+        update(ref(db, `rooms/${roomId}/state`), cleanPayload);
     }, [role, roomId]);
 
     const dispatchAction = (action: ActionPayload) => {
@@ -358,23 +341,41 @@ export const useGameLogic = () => {
 
         console.log("[Host] Finalizing Meld:", cardsToMeld.map(c => c.hanzi).join(''));
         const activePIdx = currentTurn;
-        let newPlayers = [...players];
-        const activeP = newPlayers[activePIdx];
-
-        if (!activeP) {
-            console.error("[Host] No active player found at index", activePIdx);
-            return;
-        }
+        const activeP = players[activePIdx];
+        if (!activeP) return;
 
         const meldScore = calculateMeldScore(cardsToMeld);
 
-        activeP.melds = [...activeP.melds, cardsToMeld];
-        activeP.score += meldScore;
+        let currentDeck = [...deck];
+        const cardsNeeded = 11 - (activeP.hand?.length || 0);
+
+        let newHand = activeP.hand ? activeP.hand.filter(c => !cardsToMeld.includes(c)) : [];
+        if (cardsNeeded > 0) {
+            const drawnCards = currentDeck.slice(0, cardsNeeded);
+            newHand = [...newHand, ...drawnCards];
+            currentDeck = currentDeck.slice(cardsNeeded);
+        }
+
+        const updatedPlayers = players.map((p, idx) => {
+            if (idx !== activePIdx) return p;
+            const currentMelds = Array.isArray(p.melds) ? p.melds : [];
+            return {
+                ...p,
+                hand: newHand,
+                melds: [...currentMelds, cardsToMeld],
+                score: p.score + meldScore
+            };
+        });
+
         triggerMessage(`Score Awarded: ${meldScore}pts!`);
 
         // Move to Discard phase after successful meld
-        broadcastState(newPlayers, 'DISCARD', currentTurn, discardPile, deck.length, true, null);
-    }, [role, currentTurn, players, discardPile, deck, broadcastState]);
+        // CRITICAL: Clear the challenge state to remove overlays for everyone
+        broadcastState(updatedPlayers, 'DISCARD', currentTurn, discardPile, currentDeck.length, true, null);
+        setPlayers(updatedPlayers);
+        setDeck(currentDeck);
+        setPhase('DISCARD');
+    }, [role, currentTurn, players, deck, discardPile, broadcastState]);
 
     const resolveChallenge = useCallback(() => {
         if (role !== 'HOST' || !challengeState) return;
@@ -389,14 +390,39 @@ export const useGameLogic = () => {
             finalizeMeld(challengeState.meld);
         } else {
             triggerMessage("Challenge Successful! Meld Rejected.");
-            let newPlayers = [...players];
-            const activeP = newPlayers[currentTurn];
-            if (activeP) {
-                activeP.hand = [...activeP.hand, ...challengeState.meld];
-            }
+            const newPlayers = players.map((p, idx) => {
+                if (idx !== currentTurn || !p) return p;
+                const currentHand = p.hand || [];
+                return { ...p, hand: [...currentHand, ...challengeState.meld] };
+            });
             broadcastState(newPlayers, 'DISCARD', currentTurn, discardPile, deck.length, true, null);
         }
-    }, [role, challengeState, players, currentTurn, discardPile, deck, broadcastState, finalizeMeld]);
+    }, [role, challengeState, players, currentTurn, discardPile, deck.length, broadcastState, finalizeMeld]);
+
+    // HOST TIMER ENGINE (Challenge Window)
+    useEffect(() => {
+        if (role !== 'HOST' || !roomId || phase !== 'CHALLENGE' || !challengeState) return;
+
+        console.log(`[Host] Challenge timer started (setInterval). Target: ${challengeState.endTime}`);
+
+        const timer = setInterval(() => {
+            const now = Date.now();
+            if (now >= challengeState.endTime) {
+                console.log("[Host] Challenge window expired. Finalizing state...");
+                clearInterval(timer);
+                if (challengeState.status === 'CHALLENGED') {
+                    resolveChallenge();
+                } else {
+                    finalizeMeld(challengeState.meld);
+                }
+            }
+        }, 1000); // Check every second
+
+        return () => {
+            console.log("[Host] Cleaning up challenge timer");
+            clearInterval(timer);
+        };
+    }, [role, roomId, phase, challengeState, resolveChallenge, finalizeMeld]);
 
     const processAction = (action: ActionPayload, actorId: number) => {
         if (role === 'CLIENT') return;
@@ -410,6 +436,8 @@ export const useGameLogic = () => {
         const activePIdx = currentTurn;
         const activeP = newPlayers[activePIdx];
 
+        if (!activeP) return; // Prevent crashes if player doesn't exist
+
         // Check for Challenge Actions
         if (action.actionType === 'CHALLENGE') {
             if (phase !== 'CHALLENGE' || !challengeState) return;
@@ -420,7 +448,7 @@ export const useGameLogic = () => {
                 status: 'CHALLENGED' as const,
                 endTime: Date.now() + 10000
             };
-            broadcastState(newPlayers, 'CHALLENGE', currentTurn, newDiscard, newDeck.length, true, updatedChallenge);
+            broadcastState(players, 'CHALLENGE', currentTurn, newDiscard, newDeck.length, true, updatedChallenge);
             return;
         }
 
@@ -428,24 +456,41 @@ export const useGameLogic = () => {
             if (phase !== 'CHALLENGE' || !challengeState || challengeState.status !== 'CHALLENGED') return;
             const updatedVotes = { ...challengeState.votes, [actorId]: action.data as boolean };
             const updatedChallenge = { ...challengeState, votes: updatedVotes };
-            broadcastState(newPlayers, 'CHALLENGE', currentTurn, newDiscard, newDeck.length, true, updatedChallenge);
+            broadcastState(players, 'CHALLENGE', currentTurn, newDiscard, newDeck.length, true, updatedChallenge);
             return;
         }
 
         switch (action.actionType) {
             case 'DRAW_DECK':
+                if (phase !== 'DRAW') return;
                 if (newDeck.length === 0) return;
-                activeP.hand = [...activeP.hand, newDeck[0]];
-                newDeck.shift();
-                newPhase = 'MELD';
-                break;
+
+                newPlayers[currentTurn] = { ...newPlayers[currentTurn], hand: [...(newPlayers[currentTurn]?.hand || []), newDeck[0]] };
+                console.log("Hand updated:", newPlayers[currentTurn]?.hand);
+
+                newDeck = newDeck.slice(1);
+
+                // Immediate broadcast and local update to sync draw and clear any stale challenge
+                broadcastState(newPlayers, 'MELD', currentTurn, newDiscard, newDeck.length, true, null);
+                setPlayers(newPlayers);
+                setDeck(newDeck);
+                setPhase('MELD');
+                return;
 
             case 'DRAW_DISCARD':
+                if (phase !== 'DRAW') return;
                 if (newDiscard.length === 0) return;
-                activeP.hand = [...activeP.hand, newDiscard[0]];
-                newDiscard.shift();
-                newPhase = 'MELD';
-                break;
+
+                newPlayers[currentTurn] = { ...newPlayers[currentTurn], hand: [...(newPlayers[currentTurn]?.hand || []), newDiscard[0]] };
+
+                newDiscard = newDiscard.slice(1);
+
+                // Immediate broadcast and local update to sync draw and clear any stale challenge
+                broadcastState(newPlayers, 'MELD', currentTurn, newDiscard, newDeck.length, true, null);
+                setPlayers(newPlayers);
+                setDiscardPile(newDiscard);
+                setPhase('MELD');
+                return;
 
             case 'MELD':
                 const sequence: SelectionItem[] = action.data;
@@ -462,23 +507,36 @@ export const useGameLogic = () => {
                     const fullSentence = cardsToMeld.map(c => c.hanzi).join('');
                     const currentProb = activeLesson.problems[currentProblemIndex];
                     if (currentProb.solutions.includes(fullSentence)) {
-                        activeP.score += 100;
                         triggerMessage(`✨ Correct! +100pts`);
-                        activeP.hand = [];
                         const nextIndex = currentProblemIndex + 1;
+
+                        const updatedPlayers = players.map((p, idx) => {
+                            if (idx !== currentTurn) return p;
+                            return { ...p, score: p.score + 100, hand: [] }; // Clear hand for lesson transition
+                        });
+
                         if (nextIndex < activeLesson.problems.length) {
                             setCurrentProblemIndex(nextIndex);
                             setHintLevel(0);
                             const nextProb = activeLesson.problems[nextIndex];
                             const { riggedHand, remainingDeck } = dealLessonHand(activeLesson, nextProb);
-                            activeP.hand = riggedHand;
-                            newDeck = remainingDeck;
+
+                            // We need to update the hand for the next problem
+                            const readyPlayers = updatedPlayers.map((p, idx) => {
+                                if (idx !== currentTurn) return p;
+                                return { ...p, hand: riggedHand };
+                            });
+
+                            setPlayers(readyPlayers);
+                            setDeck(remainingDeck);
+                            // Initial broadcast if needed, but LESSON is mostly OFFLINE
                         } else {
-                            triggerMessage(`🏆 Lesson Complete! Total Score: ${activeP.score}`);
+                            triggerMessage(`🏆 Lesson Complete!`);
                             setMode(null);
-                            return;
                         }
-                    } else {
+                        return;
+                    }
+                    else {
                         triggerMessage("❌ Grammatically incorrect or word order is off.");
                         return;
                     }
@@ -491,51 +549,73 @@ export const useGameLogic = () => {
                     }
 
                     // --- STAGE 2: MULTIPLAYER CONSENSUS LOOP ---
-                    if (role === 'HOST' && newPlayers.length > 1) {
+                    if (role === 'HOST' && players.length > 1) {
                         // Remove cards from hand visually before the review
-                        activeP.hand = activeP.hand.filter((_, i) => !indicesToRemove.includes(i));
+                        const updatedPlayers = players.map((p, idx) => {
+                            if (idx !== currentTurn) return p;
+                            return { ...p, hand: p.hand.filter((_, i) => !indicesToRemove.includes(i)) };
+                        });
 
                         const challenge: SyncStatePayload['challenge'] = {
                             meld: cardsToMeld,
                             challengerId: null,
                             status: 'PENDING',
-                            endTime: Date.now() + 5000, // 5-second window for peers to challenge
+                            endTime: Date.now() + 5000,
                             votes: {}
                         };
 
-                        // Transition to CHALLENGE phase and wait
                         newPhase = 'CHALLENGE';
-                        broadcastState(newPlayers, 'CHALLENGE', currentTurn, newDiscard, newDeck.length, true, challenge);
-                        return; // IMPORTANT: Prevent final broadcastState from overwriting the challenge
+                        broadcastState(updatedPlayers, 'CHALLENGE', currentTurn, newDiscard, newDeck.length, true, challenge);
+                        return;
                     } else {
                         // Offline or Solo Sandbox: Award points immediately
                         const meldScore = calculateMeldScore(cardsToMeld);
-                        activeP.melds = [...activeP.melds, cardsToMeld];
-                        activeP.hand = activeP.hand.filter((_, i) => !indicesToRemove.includes(i));
-                        activeP.score += meldScore;
+                        const updatedPlayers = players.map((p, idx) => {
+                            if (idx !== currentTurn) return p;
+                            const currentMelds = Array.isArray(p.melds) ? p.melds : [];
+                            return {
+                                ...p,
+                                melds: [...currentMelds, cardsToMeld],
+                                hand: p.hand.filter((_, i) => !indicesToRemove.includes(i)),
+                                score: p.score + meldScore
+                            };
+                        });
 
                         triggerMessage(`✅ Correct Construction! +${meldScore}pts`);
+                        newPlayers = updatedPlayers;
                         newPhase = 'DISCARD';
                     }
                 }
                 break;
 
             case 'SKIP':
-                newPhase = 'DISCARD';
-                break;
+                // CRITICAL: Clear the challenge state to remove overlays for everyone
+                broadcastState(players, 'DISCARD', currentTurn, discardPile, deck.length, true, null);
+                setPlayers(players);
+                setPhase('DISCARD');
+                return;
 
             case 'DISCARD':
                 const indexToDiscard: number = action.data;
-                const card = activeP.hand[indexToDiscard];
-                activeP.hand = activeP.hand.filter((_, i) => i !== indexToDiscard);
-                newDiscard = [card, ...newDiscard];
-                if (newPlayers.length > 1) newTurn = (newTurn + 1) % newPlayers.length;
+                const discardedCard = players[currentTurn].hand[indexToDiscard];
+                newPlayers = players.map((p, idx) => {
+                    if (idx !== currentTurn) return p;
+                    return { ...p, hand: p.hand.filter((_, i) => i !== indexToDiscard) };
+                });
+                newDiscard = [discardedCard, ...discardPile];
+                if (players.length > 1) newTurn = (currentTurn + 1) % players.length;
                 newPhase = 'DRAW';
                 break;
 
             case 'SORT':
                 const typeOrder: Record<WordType, number> = { 'noun': 1, 'verb': 2, 'adj': 3, 'grammar': 4, 'wild': 5 };
-                activeP.hand.sort((a, b) => typeOrder[a.type] - typeOrder[b.type]);
+                newPlayers = players.map((p, idx) => {
+                    if (idx !== currentTurn) return p;
+                    return {
+                        ...p,
+                        hand: [...p.hand].sort((a, b) => typeOrder[a.type] - typeOrder[b.type])
+                    };
+                });
                 break;
         }
 
