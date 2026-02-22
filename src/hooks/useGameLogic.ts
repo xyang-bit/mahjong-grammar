@@ -308,21 +308,21 @@ export const useGameLogic = () => {
         locked: boolean = true,
         challenge: SyncStatePayload['challenge'] | null = null
     ) => {
-        if (role !== 'HOST' || !roomId) return;
+        console.log(`[Host] Broadcasting State: Phase=${currentPhase}, Turn=${currentTurnIdx}`);
+        // Protection: Ensure players array is valid and maintains consistent length (0-4)
+        const validatedPlayers = (currentPlayers || []).map(p => p || { id: -1, name: 'Empty', hand: [], melds: [], score: 0 });
 
-        // Clean payload of undefined values for Firebase
         const cleanPayload = JSON.parse(JSON.stringify({
-            players: [...currentPlayers],
+            players: validatedPlayers,
             deckCount: currentDeckLen,
-            discardPile: currentDiscard,
-            currentTurn: currentTurnIdx,
+            discardPile: currentDiscard || [],
+            currentTurn: currentTurnIdx || 0,
             phase: currentPhase,
             roomLocked: locked,
-            lastUpdated: Date.now(), // Fallback to Date.now if serverTimestamp is tricky in nested updates
-            challenge: challenge
+            lastUpdated: Date.now(),
+            challenge: challenge || null
         }));
 
-        console.log(`[Host] Broadcasting State: Phase=${currentPhase}, Turn=${currentTurnIdx}`);
         update(ref(db, `rooms/${roomId}/state`), cleanPayload);
     }, [role, roomId]);
 
@@ -345,8 +345,11 @@ export const useGameLogic = () => {
 
         console.log("[Host] Finalizing Meld:", cardsToMeld.map(c => c.hanzi).join(''));
         const activePIdx = currentTurn;
-        const activeP = players[activePIdx];
-        if (!activeP) return;
+        const activeP = players?.[activePIdx];
+        if (!activeP) {
+            console.error("[Host] Cannot finalize meld: Active player not found at index", activePIdx);
+            return;
+        }
 
         const meldScore = calculateMeldScore(cardsToMeld);
 
@@ -395,7 +398,15 @@ export const useGameLogic = () => {
 
     const resolveChallenge = useCallback(() => {
         if (role !== 'HOST' || !challengeState) return;
-        const votes = Object.values(challengeState.votes);
+
+        // Global Array Check: Ensure players data is fully loaded
+        if (!players || players.length < 2) {
+            console.warn("[Host] resolveChallenge called with insufficient players. Falling back to meld sweep.");
+            finalizeMeld(challengeState.meld);
+            return;
+        }
+
+        const votes = Object.values(challengeState.votes || {});
         const acceptCount = votes.filter(v => v === true).length;
         const rejectCount = votes.filter(v => v === false).length;
 
@@ -450,9 +461,12 @@ export const useGameLogic = () => {
         let newTurn = currentTurn;
 
         const activePIdx = currentTurn;
-        const activeP = newPlayers[activePIdx];
+        const activeP = newPlayers?.[activePIdx];
 
-        if (!activeP) return; // Prevent crashes if player doesn't exist
+        if (!activeP) {
+            console.warn("[Host] processAction ignored: Player state not yet initialized or player not found at index", activePIdx);
+            return;
+        }
 
         // Check for Challenge Actions
         if (action.actionType === 'CHALLENGE') {
@@ -613,7 +627,12 @@ export const useGameLogic = () => {
 
             case 'DISCARD':
                 const indexToDiscard: number = action.data;
-                const discardedCard = players[currentTurn].hand[indexToDiscard];
+                const currentActiveP = players?.[currentTurn];
+                if (!currentActiveP || !currentActiveP.hand || !currentActiveP.hand[indexToDiscard]) {
+                    console.error("[Host] Cannot discard: Hand or index invalid.");
+                    return;
+                }
+                const discardedCard = currentActiveP.hand[indexToDiscard];
                 newPlayers = players.map((p, idx) => {
                     if (idx !== currentTurn) return p;
                     return { ...p, hand: p.hand.filter((_, i) => i !== indexToDiscard) };

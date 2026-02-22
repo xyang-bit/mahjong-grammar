@@ -213,7 +213,7 @@ export default function App() {
                         <div className="w-full flex flex-col gap-4">
                             {game.challengeState.status === 'PENDING' ? (
                                 <div className="flex justify-center">
-                                    {game.myPlayerId !== game.players[game.currentTurn].id ? (
+                                    {(game.players?.[game.currentTurn] && game.myPlayerId !== game.players[game.currentTurn]?.id) ? (
                                         <button
                                             onClick={game.challengeMeld}
                                             className="bg-[var(--color-verb-red)] text-white px-12 py-4 rounded-2xl border-2 border-[var(--color-stroke-primary)] shadow-[0_6px_0_var(--color-stroke-primary)] active:shadow-none active:translate-y-1 font-bold text-xl hover:brightness-110 transition-all"
@@ -221,7 +221,11 @@ export default function App() {
                                             Challenge!
                                         </button>
                                     ) : (
-                                        <div className="text-[var(--color-noun-blue)] font-bold animate-pulse">Waiting for peer review...</div>
+                                        <div className="text-[var(--color-noun-blue)] font-bold animate-pulse text-center">
+                                            {game.myPlayerId === game.players?.[game.currentTurn]?.id
+                                                ? "Searching for errors..."
+                                                : "Waiting for peer review..."}
+                                        </div>
                                     )}
                                 </div>
                             ) : (
@@ -458,7 +462,7 @@ export default function App() {
             {!isMyTurn && (
                 <div className="fixed bottom-80 w-full text-center pointer-events-none z-30">
                     <span className="bg-white/80 backdrop-blur text-[var(--color-stroke-primary)] px-4 py-2 rounded-full font-bold text-sm border border-[var(--color-stroke-primary)]">
-                        Waiting for {currentPlayer?.name || 'Connecting...'}...
+                        Waiting for {currentPlayer?.name || players?.[game.currentTurn]?.name || 'Connecting...'}...
                     </span>
                 </div>
             )}
