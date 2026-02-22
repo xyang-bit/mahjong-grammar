@@ -462,7 +462,9 @@ export default function App() {
             {!isMyTurn && (
                 <div className="fixed bottom-80 w-full text-center pointer-events-none z-30">
                     <span className="bg-white/80 backdrop-blur text-[var(--color-stroke-primary)] px-4 py-2 rounded-full font-bold text-sm border border-[var(--color-stroke-primary)]">
-                        Waiting for {currentPlayer?.name || players?.[game.currentTurn]?.name || 'Connecting...'}...
+                        {game.challengeState && game.challengeState.challengerId !== null && game.challengeState.challengerId !== undefined && players?.[game.challengeState.challengerId]
+                            ? `Challenged by ${players[game.challengeState.challengerId].name}...`
+                            : `Waiting for ${currentPlayer?.name || players?.[game.currentTurn]?.name || 'Connecting...'}...`}
                     </span>
                 </div>
             )}

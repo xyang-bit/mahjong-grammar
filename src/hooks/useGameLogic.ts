@@ -311,6 +311,10 @@ export const useGameLogic = () => {
         console.log(`[Host] Broadcasting State: Phase=${currentPhase}, Turn=${currentTurnIdx}`);
         // Protection: Ensure players array is valid and maintains consistent length (0-4)
         const validatedPlayers = (currentPlayers || []).map(p => p || { id: -1, name: 'Empty', hand: [], melds: [], score: 0 });
+        // Ensure at least 2 player slots for stability in index-based lookups
+        while (validatedPlayers.length < 2) {
+            validatedPlayers.push({ id: validatedPlayers.length + 1, name: 'Waiting...', hand: [], melds: [], score: 0, isHost: false });
+        }
 
         const cleanPayload = JSON.parse(JSON.stringify({
             players: validatedPlayers,
@@ -399,11 +403,24 @@ export const useGameLogic = () => {
     const resolveChallenge = useCallback(() => {
         if (role !== 'HOST' || !challengeState) return;
 
-        // Global Array Check: Ensure players data is fully loaded
-        if (!players || players.length < 2) {
-            console.warn("[Host] resolveChallenge called with insufficient players. Falling back to meld sweep.");
+        // Global Array Check: Ensure players data is fully loaded and challenger is valid
+        const activePIdx = currentTurn;
+        const challengerIdx = challengeState.challengerId;
+
+        // Strict Array Bounds: Stop crash if player slot is missing
+        if (!players || players.length < 2 || !players[activePIdx]) {
+            console.warn("[Host] resolveChallenge: Insufficient or missing player data. Defaulting to Pass.");
             finalizeMeld(challengeState.meld);
             return;
+        }
+
+        // If in CHALLENGED status, verify the challenger exists
+        if (challengeState.status === 'CHALLENGED') {
+            if (challengerIdx === null || challengerIdx === undefined || !players[challengerIdx as number]) {
+                console.warn("[Host] resolveChallenge: Challenger missing or invalid. Defaulting to Pass.");
+                finalizeMeld(challengeState.meld);
+                return;
+            }
         }
 
         const votes = Object.values(challengeState.votes || {});
@@ -437,9 +454,15 @@ export const useGameLogic = () => {
             if (now >= challengeState.endTime) {
                 console.log("[Host] Challenge window expired. Finalizing state...");
                 clearInterval(timer);
-                if (challengeState.status === 'CHALLENGED') {
+
+                // Strict Guard: Ensure players and challenger exist before trying resolution
+                const challengerIdx = challengeState.challengerId;
+                const challengerExists = challengerIdx !== null && challengerIdx !== undefined && players?.[challengerIdx as number];
+
+                if (challengeState.status === 'CHALLENGED' && challengerExists) {
                     resolveChallenge();
                 } else {
+                    // Default to Pass if status is PENDING or challenger is missing
                     finalizeMeld(challengeState.meld);
                 }
             }
