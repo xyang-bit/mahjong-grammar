@@ -350,9 +350,20 @@ export const useGameLogic = () => {
         const cardsNeeded = 11 - (activeP.hand?.length || 0);
 
         let newHand = activeP.hand ? activeP.hand.filter(c => !cardsToMeld.includes(c)) : [];
-        if (cardsNeeded > 0) {
-            const drawnCards = currentDeck.slice(0, cardsNeeded);
-            newHand = [...newHand, ...drawnCards];
+        if (cardsNeeded <= 0) {
+            // No cards needed, just update hand with removed meld cards
+        } else {
+            const rawDrawnCards = currentDeck.slice(0, cardsNeeded);
+            const validDrawnCards = rawDrawnCards.map(tile => {
+                if (tile && !(tile.hanzi || (tile as any).char || (tile as any).character)) {
+                    tile.hanzi = tile.hanzi || '?';
+                }
+                return tile;
+            }).filter(tile => tile && (tile.hanzi || (tile as any).char || (tile as any).character));
+
+            console.log('Refilling hand with:', validDrawnCards);
+
+            newHand = [...newHand, ...validDrawnCards];
             currentDeck = currentDeck.slice(cardsNeeded);
         }
 
