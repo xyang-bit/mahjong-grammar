@@ -512,7 +512,7 @@ export const useGameLogic = () => {
                 ...challengeState,
                 challengerId: actorId,
                 status: 'CHALLENGED' as const,
-                endTime: Date.now() + 10000
+                endTime: Date.now() + 5000
             };
             broadcastState(players, 'CHALLENGE', currentTurn, newDiscard, newDeck.length, true, updatedChallenge);
             return;
