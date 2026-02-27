@@ -464,10 +464,8 @@ export const useGameLogic = () => {
             const p = players?.[safeIdx as number];
 
             if (!p || challengeState.status !== 'CHALLENGED') {
-                // Component-Level Guard logic inside the timer loop
-                console.log("[Host] Timer detected missing player or non-challenged state. Finalizing quietly.");
-                clearInterval(timer);
-                finalizeMeld(challengeState.meld);
+                // Wait for player array to sync. Do not immediately clear interval.
+                console.log("[Host] Missing player slot or not challenged. Waiting for array sync...");
                 return;
             }
 
