@@ -433,14 +433,21 @@ export const useGameLogic = () => {
             triggerMessage("Challenge Failed! Meld Accepted.");
             finalizeMeld(challengeState.meld);
         } else {
-            triggerMessage("Challenge Successful! Meld Rejected.");
+            triggerMessage("Incorrect grammar! Try again.");
             const newPlayers = players.map((p, idx) => {
                 const targetTurn = currentTurn || 0;
                 if (idx !== targetTurn || !p) return p;
                 const currentHand = p.hand || [];
+                // Return tiles to the active player's hand
                 return { ...p, hand: [...currentHand, ...challengeState.meld] };
             });
-            broadcastState(newPlayers, 'DISCARD', currentTurn, discardPile, deck.length, true, null);
+            // Update local state for Host
+            setPlayers(newPlayers);
+            setPhase('MELD');
+
+            // Sync to clients: Keep phase as MELD, pass the updated players array
+            // The challenge state in Firebase will be overwritten/cleared by the broadcast
+            broadcastState(newPlayers, 'MELD', currentTurn, discardPile, deck.length, true, null);
         }
     }, [role, challengeState, players, currentTurn, discardPile, deck.length, broadcastState, finalizeMeld]);
 
