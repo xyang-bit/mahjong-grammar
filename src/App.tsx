@@ -183,96 +183,102 @@ export default function App() {
             )}
 
             {/* CHALLENGE WINDOW */}
-            {game.phase === 'CHALLENGE' && game.challengeState && (
+            {game.phase === 'CHALLENGE' && game.challengeState && (game.players?.length > 0) && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[var(--color-bg-canvas)]/90 backdrop-blur-sm p-4 animate-in fade-in duration-300">
-                    <div className="bg-white w-full max-w-2xl rounded-3xl border-4 border-[var(--color-stroke-primary)] shadow-[0_12px_0_var(--color-stroke-primary)] p-8 flex flex-col items-center space-y-8">
-                        <div className="text-center space-y-2">
-                            <h2 className="text-2xl font-bold uppercase tracking-widest text-[var(--color-verb-red)]">Challenge Window</h2>
-                            <p className="font-bold opacity-60">Is this a valid Chinese sentence?</p>
-                        </div>
+                    {(() => {
+                        // RECURSIVE UI GUARD: Stop rendering entirely if critical data is missing
+                        if (!game.players || game.players.length === 0 || !game.challengeState) return null;
 
-                        {/* The Sentence */}
-                        <div className="flex flex-wrap justify-center gap-4 py-8 px-4 bg-[var(--color-bg-canvas)] rounded-2xl border-2 border-dashed border-[var(--color-stroke-primary)]/20 w-full">
-                            {game.challengeState?.meld?.map((card, idx) => (
-                                <MahjongTile key={idx} card={card} size="lg" />
-                            ))}
-                        </div>
+                        return (
+                            <div className="bg-white w-full max-w-2xl rounded-3xl border-4 border-[var(--color-stroke-primary)] shadow-[0_12px_0_var(--color-stroke-primary)] p-8 flex flex-col items-center space-y-8">
+                                <div className="text-center space-y-2">
+                                    <h2 className="text-2xl font-bold uppercase tracking-widest text-[var(--color-verb-red)]">Challenge Window</h2>
+                                    <p className="font-bold opacity-60">Is this a valid Chinese sentence?</p>
+                                </div>
 
-                        {/* Timer */}
-                        <div className="flex flex-col items-center gap-2">
-                            <div className="w-64 h-4 bg-[var(--color-bg-canvas)] rounded-full border-2 border-[var(--color-stroke-primary)] overflow-hidden">
-                                <div
-                                    className="h-full bg-[var(--color-verb-red)] transition-all duration-500"
-                                    style={{ width: `${Math.max(0, (game.challengeState.endTime - Date.now()) / (game.challengeState.status === 'CHALLENGED' ? 10000 : 5000)) * 100}%` }}
-                                />
-                            </div>
-                            <div className="text-sm font-bold opacity-50">Auto-accepting soon...</div>
-                        </div>
+                                {/* The Sentence */}
+                                <div className="flex flex-wrap justify-center gap-4 py-8 px-4 bg-[var(--color-bg-canvas)] rounded-2xl border-2 border-dashed border-[var(--color-stroke-primary)]/20 w-full">
+                                    {game.challengeState?.meld?.map((card, idx) => (
+                                        <MahjongTile key={idx} card={card} size="lg" />
+                                    ))}
+                                </div>
 
-                        {/* Peer Review Controls */}
-                        <div className="w-full flex flex-col gap-4">
-                            {game.challengeState.status === 'PENDING' ? (
-                                <div className="flex justify-center">
-                                    {(game.players?.[game.currentTurn] && game.myPlayerId !== game.players[game.currentTurn]?.id) ? (
-                                        <button
-                                            onClick={game.challengeMeld}
-                                            className="bg-[var(--color-verb-red)] text-white px-12 py-4 rounded-2xl border-2 border-[var(--color-stroke-primary)] shadow-[0_6px_0_var(--color-stroke-primary)] active:shadow-none active:translate-y-1 font-bold text-xl hover:brightness-110 transition-all"
-                                        >
-                                            Challenge!
-                                        </button>
+                                {/* Timer */}
+                                <div className="flex flex-col items-center gap-2">
+                                    <div className="w-64 h-4 bg-[var(--color-bg-canvas)] rounded-full border-2 border-[var(--color-stroke-primary)] overflow-hidden">
+                                        <div
+                                            className="h-full bg-[var(--color-verb-red)] transition-all duration-500"
+                                            style={{ width: `${Math.max(0, (game.challengeState.endTime - Date.now()) / (game.challengeState.status === 'CHALLENGED' ? 10000 : 5000)) * 100}%` }}
+                                        />
+                                    </div>
+                                    <div className="text-sm font-bold opacity-50">Auto-accepting soon...</div>
+                                </div>
+
+                                {/* Peer Review Controls */}
+                                <div className="w-full flex flex-col gap-4">
+                                    {game.challengeState.status === 'PENDING' ? (
+                                        <div className="flex justify-center">
+                                            {(game.players?.[game.currentTurn || 0] && game.myPlayerId !== game.players[game.currentTurn || 0]?.id) ? (
+                                                <button
+                                                    onClick={game.challengeMeld}
+                                                    className="bg-[var(--color-verb-red)] text-white px-12 py-4 rounded-2xl border-2 border-[var(--color-stroke-primary)] shadow-[0_6px_0_var(--color-stroke-primary)] active:shadow-none active:translate-y-1 font-bold text-xl hover:brightness-110 transition-all"
+                                                >
+                                                    Challenge!
+                                                </button>
+                                            ) : (
+                                                <div className="text-[var(--color-noun-blue)] font-bold animate-pulse text-center">
+                                                    {game.myPlayerId === game.players?.[game.currentTurn || 0]?.id
+                                                        ? "Searching for errors..."
+                                                        : "Waiting for peer review..."}
+                                                </div>
+                                            )}
+                                        </div>
                                     ) : (
-                                        <div className="text-[var(--color-noun-blue)] font-bold animate-pulse text-center">
-                                            {game.myPlayerId === game.players?.[game.currentTurn]?.id
-                                                ? "Searching for errors..."
-                                                : "Waiting for peer review..."}
+                                        <div className="space-y-6 w-full">
+                                            <div className="text-center font-bold text-xl text-[var(--color-verb-red)] animate-bounce italic">
+                                                SENTENCE CHALLENGED!
+                                            </div>
+
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <button
+                                                    onClick={() => game.voteMeld(true)}
+                                                    className={`py-6 rounded-2xl border-2 border-[var(--color-stroke-primary)] font-bold text-xl transition-all
+                                                ${game.challengeState.votes[game.myPlayerId] === true
+                                                            ? 'bg-[var(--color-adj-green)] text-white shadow-none translate-y-1'
+                                                            : 'bg-white shadow-[0_6px_0_var(--color-stroke-primary)] hover:brightness-95'}`}
+                                                >
+                                                    Accept (Valid)
+                                                </button>
+                                                <button
+                                                    onClick={() => game.voteMeld(false)}
+                                                    className={`py-6 rounded-2xl border-2 border-[var(--color-stroke-primary)] font-bold text-xl transition-all
+                                                ${game.challengeState.votes[game.myPlayerId] === false
+                                                            ? 'bg-[var(--color-verb-red)] text-white shadow-none translate-y-1'
+                                                            : 'bg-white shadow-[0_6px_0_var(--color-stroke-primary)] hover:brightness-95'}`}
+                                                >
+                                                    Reject (Error)
+                                                </button>
+                                            </div>
+
+                                            {/* Vote Status */}
+                                            <div className="flex justify-center gap-2">
+                                                {game.players?.map(p => {
+                                                    const vote = game.challengeState?.votes?.[p.id];
+                                                    return (
+                                                        <div key={p.id} className={`w-8 h-8 rounded-full border-2 border-[var(--color-stroke-primary)] flex items-center justify-center font-bold text-xs
+                                                    ${vote === true ? 'bg-[var(--color-adj-green)] text-white' :
+                                                                vote === false ? 'bg-[var(--color-verb-red)] text-white' :
+                                                                    'bg-gray-200 opacity-50'}`}>
+                                                            {p.name?.[0] || '?'}
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
                                         </div>
                                     )}
                                 </div>
-                            ) : (
-                                <div className="space-y-6 w-full">
-                                    <div className="text-center font-bold text-xl text-[var(--color-verb-red)] animate-bounce italic">
-                                        SENTENCE CHALLENGED!
-                                    </div>
-
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <button
-                                            onClick={() => game.voteMeld(true)}
-                                            className={`py-6 rounded-2xl border-2 border-[var(--color-stroke-primary)] font-bold text-xl transition-all
-                                                ${game.challengeState.votes[game.myPlayerId] === true
-                                                    ? 'bg-[var(--color-adj-green)] text-white shadow-none translate-y-1'
-                                                    : 'bg-white shadow-[0_6px_0_var(--color-stroke-primary)] hover:brightness-95'}`}
-                                        >
-                                            Accept (Valid)
-                                        </button>
-                                        <button
-                                            onClick={() => game.voteMeld(false)}
-                                            className={`py-6 rounded-2xl border-2 border-[var(--color-stroke-primary)] font-bold text-xl transition-all
-                                                ${game.challengeState.votes[game.myPlayerId] === false
-                                                    ? 'bg-[var(--color-verb-red)] text-white shadow-none translate-y-1'
-                                                    : 'bg-white shadow-[0_6px_0_var(--color-stroke-primary)] hover:brightness-95'}`}
-                                        >
-                                            Reject (Error)
-                                        </button>
-                                    </div>
-
-                                    {/* Vote Status */}
-                                    <div className="flex justify-center gap-2">
-                                        {game.players?.map(p => {
-                                            const vote = game.challengeState?.votes?.[p.id];
-                                            return (
-                                                <div key={p.id} className={`w-8 h-8 rounded-full border-2 border-[var(--color-stroke-primary)] flex items-center justify-center font-bold text-xs
-                                                    ${vote === true ? 'bg-[var(--color-adj-green)] text-white' :
-                                                        vote === false ? 'bg-[var(--color-verb-red)] text-white' :
-                                                            'bg-gray-200 opacity-50'}`}>
-                                                    {p.name?.[0] || '?'}
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-                    </div>
+                            </div>);
+                    })()}
                 </div>
             )}
 
@@ -462,9 +468,9 @@ export default function App() {
             {!isMyTurn && (
                 <div className="fixed bottom-80 w-full text-center pointer-events-none z-30">
                     <span className="bg-white/80 backdrop-blur text-[var(--color-stroke-primary)] px-4 py-2 rounded-full font-bold text-sm border border-[var(--color-stroke-primary)]">
-                        {game.challengeState && game.challengeState.challengerId !== null && game.challengeState.challengerId !== undefined && players?.[game.challengeState.challengerId]
-                            ? `Challenged by ${players[game.challengeState.challengerId].name}...`
-                            : `Waiting for ${currentPlayer?.name || players?.[game.currentTurn]?.name || 'Connecting...'}...`}
+                        {game.challengeState && game.challengeState.challengerId !== null && game.challengeState.challengerId !== undefined && players?.[game.challengeState.challengerId || 0]
+                            ? `Challenged by ${players[game.challengeState.challengerId || 0]?.name || 'Unknown Player'}...`
+                            : `Waiting for ${currentPlayer?.name || players?.[game.currentTurn || 0]?.name || 'Unknown Player'}...`}
                     </span>
                 </div>
             )}

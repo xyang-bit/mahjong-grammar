@@ -435,7 +435,8 @@ export const useGameLogic = () => {
         } else {
             triggerMessage("Challenge Successful! Meld Rejected.");
             const newPlayers = players.map((p, idx) => {
-                if (idx !== currentTurn || !p) return p;
+                const targetTurn = currentTurn || 0;
+                if (idx !== targetTurn || !p) return p;
                 const currentHand = p.hand || [];
                 return { ...p, hand: [...currentHand, ...challengeState.meld] };
             });
@@ -494,7 +495,8 @@ export const useGameLogic = () => {
         // Check for Challenge Actions
         if (action.actionType === 'CHALLENGE') {
             if (phase !== 'CHALLENGE' || !challengeState) return;
-            if (actorId === activeP.id) return;
+            const targetP = activeP || newPlayers?.[0];
+            if (actorId === targetP?.id) return;
             const updatedChallenge = {
                 ...challengeState,
                 challengerId: actorId,
