@@ -182,102 +182,138 @@ export default function App() {
                 </div>
             )}
 
+            {/* ERROR RECOVERY GUARD */}
+            {(!game.players || !Array.isArray(game.players)) && (
+                <div className="fixed inset-0 z-[200] flex flex-col items-center justify-center bg-black/90 text-white p-8">
+                    <h2 className="text-2xl font-bold text-red-500 mb-4">State Desync Detected</h2>
+                    <p className="mb-8 text-center opacity-80">The game encountered missing player data.</p>
+                    <button
+                        onClick={() => window.location.reload()}
+                        className="bg-white text-black px-8 py-3 rounded-full font-bold hover:bg-gray-200"
+                    >
+                        Reload Game
+                    </button>
+                </div>
+            )}
+
             {/* CHALLENGE WINDOW */}
             {game.phase === 'CHALLENGE' && game.challengeState && (game.players?.length > 0) && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[var(--color-bg-canvas)]/90 backdrop-blur-sm p-4 animate-in fade-in duration-300">
                     {(() => {
-                        // RECURSIVE UI GUARD: Stop rendering entirely if critical data is missing
-                        if (!game.players || game.players.length === 0 || !game.challengeState) return null;
+                        // HARD FIX: Component-Level Guard
+                        if (!game.players || game.players.length === 0 || !game.challengeState) {
+                            console.error("[UI Guard] Missing critical challenge data. Suppressing render.");
+                            return null;
+                        }
 
-                        return (
-                            <div className="bg-white w-full max-w-2xl rounded-3xl border-4 border-[var(--color-stroke-primary)] shadow-[0_12px_0_var(--color-stroke-primary)] p-8 flex flex-col items-center space-y-8">
-                                <div className="text-center space-y-2">
-                                    <h2 className="text-2xl font-bold uppercase tracking-widest text-[var(--color-verb-red)]">Challenge Window</h2>
-                                    <p className="font-bold opacity-60">Is this a valid Chinese sentence?</p>
-                                </div>
+                        try {
+                            const activePlayer = game.players?.[game.currentTurn || 0];
+                            const meld = game.challengeState.meld || [];
 
-                                {/* The Sentence */}
-                                <div className="flex flex-wrap justify-center gap-4 py-8 px-4 bg-[var(--color-bg-canvas)] rounded-2xl border-2 border-dashed border-[var(--color-stroke-primary)]/20 w-full">
-                                    {game.challengeState?.meld?.map((card, idx) => (
-                                        <MahjongTile key={idx} card={card} size="lg" />
-                                    ))}
-                                </div>
-
-                                {/* Timer */}
-                                <div className="flex flex-col items-center gap-2">
-                                    <div className="w-64 h-4 bg-[var(--color-bg-canvas)] rounded-full border-2 border-[var(--color-stroke-primary)] overflow-hidden">
-                                        <div
-                                            className="h-full bg-[var(--color-verb-red)] transition-all duration-500"
-                                            style={{ width: `${Math.max(0, (game.challengeState.endTime - Date.now()) / (game.challengeState.status === 'CHALLENGED' ? 10000 : 5000)) * 100}%` }}
-                                        />
+                            return (
+                                <div className="bg-white w-full max-w-2xl rounded-3xl border-4 border-[var(--color-stroke-primary)] shadow-[0_12px_0_var(--color-stroke-primary)] p-8 flex flex-col items-center space-y-8">
+                                    <div className="text-center space-y-2">
+                                        <h2 className="text-2xl font-bold uppercase tracking-widest text-[var(--color-verb-red)]">Challenge Window</h2>
+                                        <p className="font-bold opacity-60">Is this a valid Chinese sentence?</p>
                                     </div>
-                                    <div className="text-sm font-bold opacity-50">Auto-accepting soon...</div>
-                                </div>
 
-                                {/* Peer Review Controls */}
-                                <div className="w-full flex flex-col gap-4">
-                                    {game.challengeState.status === 'PENDING' ? (
-                                        <div className="flex justify-center">
-                                            {(game.players?.[game.currentTurn || 0] && game.myPlayerId !== game.players[game.currentTurn || 0]?.id) ? (
-                                                <button
-                                                    onClick={game.challengeMeld}
-                                                    className="bg-[var(--color-verb-red)] text-white px-12 py-4 rounded-2xl border-2 border-[var(--color-stroke-primary)] shadow-[0_6px_0_var(--color-stroke-primary)] active:shadow-none active:translate-y-1 font-bold text-xl hover:brightness-110 transition-all"
-                                                >
-                                                    Challenge!
-                                                </button>
-                                            ) : (
-                                                <div className="text-[var(--color-noun-blue)] font-bold animate-pulse text-center">
-                                                    {game.myPlayerId === game.players?.[game.currentTurn || 0]?.id
-                                                        ? "Searching for errors..."
-                                                        : "Waiting for peer review..."}
+                                    {/* The Sentence */}
+                                    <div className="flex flex-wrap justify-center gap-4 py-8 px-4 bg-[var(--color-bg-canvas)] rounded-2xl border-2 border-dashed border-[var(--color-stroke-primary)]/20 w-full">
+                                        {meld.map((card, idx) => (
+                                            <MahjongTile key={idx} card={card} size="lg" />
+                                        ))}
+                                    </div>
+
+                                    {/* Timer */}
+                                    <div className="flex flex-col items-center gap-2">
+                                        <div className="w-64 h-4 bg-[var(--color-bg-canvas)] rounded-full border-2 border-[var(--color-stroke-primary)] overflow-hidden">
+                                            <div
+                                                className="h-full bg-[var(--color-verb-red)] transition-all duration-500"
+                                                style={{ width: `${Math.max(0, (game.challengeState.endTime - Date.now()) / (game.challengeState.status === 'CHALLENGED' ? 10000 : 5000)) * 100}%` }}
+                                            />
+                                        </div>
+                                        <div className="text-sm font-bold opacity-50">Auto-accepting soon...</div>
+                                    </div>
+
+                                    {/* Peer Review Controls */}
+                                    <div className="w-full flex flex-col gap-4">
+                                        {game.challengeState.status === 'PENDING' ? (
+                                            <div className="flex justify-center">
+                                                {(activePlayer && game.myPlayerId !== activePlayer?.id) ? (
+                                                    <button
+                                                        onClick={game.challengeMeld}
+                                                        className="bg-[var(--color-verb-red)] text-white px-12 py-4 rounded-2xl border-2 border-[var(--color-stroke-primary)] shadow-[0_6px_0_var(--color-stroke-primary)] active:shadow-none active:translate-y-1 font-bold text-xl hover:brightness-110 transition-all"
+                                                    >
+                                                        Challenge!
+                                                    </button>
+                                                ) : (
+                                                    <div className="text-[var(--color-noun-blue)] font-bold animate-pulse text-center">
+                                                        {game.myPlayerId === activePlayer?.id
+                                                            ? "Searching for errors..."
+                                                            : "Waiting for peer review..."}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        ) : (
+                                            <div className="space-y-6 w-full">
+                                                <div className="text-center font-bold text-xl text-[var(--color-verb-red)] animate-bounce italic">
+                                                    SENTENCE CHALLENGED!
                                                 </div>
-                                            )}
-                                        </div>
-                                    ) : (
-                                        <div className="space-y-6 w-full">
-                                            <div className="text-center font-bold text-xl text-[var(--color-verb-red)] animate-bounce italic">
-                                                SENTENCE CHALLENGED!
-                                            </div>
 
-                                            <div className="grid grid-cols-2 gap-4">
-                                                <button
-                                                    onClick={() => game.voteMeld(true)}
-                                                    className={`py-6 rounded-2xl border-2 border-[var(--color-stroke-primary)] font-bold text-xl transition-all
+                                                <div className="grid grid-cols-2 gap-4">
+                                                    <button
+                                                        onClick={() => game.voteMeld(true)}
+                                                        className={`py-6 rounded-2xl border-2 border-[var(--color-stroke-primary)] font-bold text-xl transition-all
                                                 ${game.challengeState.votes[game.myPlayerId] === true
-                                                            ? 'bg-[var(--color-adj-green)] text-white shadow-none translate-y-1'
-                                                            : 'bg-white shadow-[0_6px_0_var(--color-stroke-primary)] hover:brightness-95'}`}
-                                                >
-                                                    Accept (Valid)
-                                                </button>
-                                                <button
-                                                    onClick={() => game.voteMeld(false)}
-                                                    className={`py-6 rounded-2xl border-2 border-[var(--color-stroke-primary)] font-bold text-xl transition-all
+                                                                ? 'bg-[var(--color-adj-green)] text-white shadow-none translate-y-1'
+                                                                : 'bg-white shadow-[0_6px_0_var(--color-stroke-primary)] hover:brightness-95'}`}
+                                                    >
+                                                        Accept (Valid)
+                                                    </button>
+                                                    <button
+                                                        onClick={() => game.voteMeld(false)}
+                                                        className={`py-6 rounded-2xl border-2 border-[var(--color-stroke-primary)] font-bold text-xl transition-all
                                                 ${game.challengeState.votes[game.myPlayerId] === false
-                                                            ? 'bg-[var(--color-verb-red)] text-white shadow-none translate-y-1'
-                                                            : 'bg-white shadow-[0_6px_0_var(--color-stroke-primary)] hover:brightness-95'}`}
-                                                >
-                                                    Reject (Error)
-                                                </button>
-                                            </div>
+                                                                ? 'bg-[var(--color-verb-red)] text-white shadow-none translate-y-1'
+                                                                : 'bg-white shadow-[0_6px_0_var(--color-stroke-primary)] hover:brightness-95'}`}
+                                                    >
+                                                        Reject (Error)
+                                                    </button>
+                                                </div>
 
-                                            {/* Vote Status */}
-                                            <div className="flex justify-center gap-2">
-                                                {game.players?.map(p => {
-                                                    const vote = game.challengeState?.votes?.[p.id];
-                                                    return (
-                                                        <div key={p.id} className={`w-8 h-8 rounded-full border-2 border-[var(--color-stroke-primary)] flex items-center justify-center font-bold text-xs
+                                                {/* Vote Status */}
+                                                <div className="flex justify-center gap-2">
+                                                    {game.players?.map(p => {
+                                                        const vote = game.challengeState?.votes?.[p.id];
+                                                        return (
+                                                            <div key={p.id} className={`w-8 h-8 rounded-full border-2 border-[var(--color-stroke-primary)] flex items-center justify-center font-bold text-xs
                                                     ${vote === true ? 'bg-[var(--color-adj-green)] text-white' :
-                                                                vote === false ? 'bg-[var(--color-verb-red)] text-white' :
-                                                                    'bg-gray-200 opacity-50'}`}>
-                                                            {p.name?.[0] || '?'}
-                                                        </div>
-                                                    );
-                                                })}
+                                                                    vote === false ? 'bg-[var(--color-verb-red)] text-white' :
+                                                                        'bg-gray-200 opacity-50'}`}>
+                                                                {p?.name?.[0] || '?'}
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
                                             </div>
-                                        </div>
-                                    )}
+                                        )}
+                                    </div>
+                                </div>);
+                        } catch (err) {
+                            console.error("[UI Guard] Crash caught in Challenge UI. Suppressing.", err);
+                            return (
+                                <div className="bg-white p-8 rounded-3xl border-4 border-red-500 text-center shadow-2xl">
+                                    <h2 className="text-2xl font-bold text-red-500 mb-4">State Desync Recovered</h2>
+                                    <p className="mb-4 text-black opacity-80">The game encountered missing data during sync.</p>
+                                    <button
+                                        onClick={() => window.location.reload()}
+                                        className="bg-black text-white px-8 py-3 rounded-full font-bold hover:bg-gray-800 transition-colors"
+                                    >
+                                        Reload Data
+                                    </button>
                                 </div>
-                            </div>);
+                            );
+                        }
                     })()}
                 </div>
             )}

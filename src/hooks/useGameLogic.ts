@@ -451,29 +451,33 @@ export const useGameLogic = () => {
         console.log(`[Host] Challenge timer started (setInterval). Target: ${challengeState.endTime}`);
 
         const timer = setInterval(() => {
+            // HARD FIX: Safe Array Access inside Timer
+            const challengerIdx = challengeState.challengerId;
+            const safeIdx = (challengerIdx !== null && challengerIdx !== undefined) ? challengerIdx : -1;
+            const p = players?.[safeIdx as number];
+
+            if (!p || challengeState.status !== 'CHALLENGED') {
+                // Component-Level Guard logic inside the timer loop
+                console.log("[Host] Timer detected missing player or non-challenged state. Finalizing quietly.");
+                clearInterval(timer);
+                finalizeMeld(challengeState.meld);
+                return;
+            }
+
             const now = Date.now();
             if (now >= challengeState.endTime) {
-                console.log("[Host] Challenge window expired. Finalizing state...");
+                console.log("[Host] Challenge window expired. Resolving challenge...");
                 clearInterval(timer);
-
-                // Strict Guard: Ensure players and challenger exist before trying resolution
-                const challengerIdx = challengeState.challengerId;
-                const challengerExists = challengerIdx !== null && challengerIdx !== undefined && players?.[challengerIdx as number];
-
-                if (challengeState.status === 'CHALLENGED' && challengerExists) {
-                    resolveChallenge();
-                } else {
-                    // Default to Pass if status is PENDING or challenger is missing
-                    finalizeMeld(challengeState.meld);
-                }
+                resolveChallenge();
             }
         }, 1000); // Check every second
 
+        // STRICT TIMER CLEANUP
         return () => {
-            console.log("[Host] Cleaning up challenge timer");
+            console.log("[Host] Cleaning up challenge timer (unmount/phase change)");
             clearInterval(timer);
         };
-    }, [role, roomId, phase, challengeState, resolveChallenge, finalizeMeld]);
+    }, [role, roomId, phase, challengeState, players, resolveChallenge, finalizeMeld]);
 
     const processAction = (action: ActionPayload, actorId: number) => {
         if (role === 'CLIENT') return;
