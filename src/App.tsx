@@ -205,6 +205,14 @@ export default function App() {
                             return null;
                         }
 
+                        // Safety Check: Avoid reading index '2' or any invalid index
+                        if (game.challengeState.challengerId !== null && game.challengeState.challengerId !== undefined) {
+                            if (!game.players[game.challengeState.challengerId as number]) {
+                                console.warn(`[UI Guard] Player index ${game.challengeState.challengerId} not found. Suppressing crash.`);
+                                return null;
+                            }
+                        }
+
                         try {
                             const activePlayer = game.players?.[game.currentTurn || 0];
                             const meld = game.challengeState.meld || [];

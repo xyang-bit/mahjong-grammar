@@ -448,8 +448,17 @@ export const useGameLogic = () => {
             // Sync to clients: Keep phase as MELD, pass the updated players array
             // The challenge state in Firebase will be overwritten/cleared by the broadcast
             broadcastState(newPlayers, 'MELD', currentTurn, discardPile, deck.length, true, null);
+
+            // AUTO-RESOLVE SAFETY: If stuck in MELD/CHALLENGE for too long, force forward
+            setTimeout(() => {
+                if (phase === 'CHALLENGE' || phase === 'MELD') {
+                    console.log("[Host] Auto-resolving stuck phase to DISCARD");
+                    setPhase('DISCARD');
+                    broadcastState(newPlayers, 'DISCARD', currentTurn, discardPile, deck.length, true, null);
+                }
+            }, 6000);
         }
-    }, [role, challengeState, players, currentTurn, discardPile, deck.length, broadcastState, finalizeMeld]);
+    }, [role, challengeState, players, currentTurn, discardPile, deck.length, broadcastState, finalizeMeld, phase]);
 
     // HOST TIMER ENGINE (Challenge Window)
     useEffect(() => {
@@ -470,8 +479,8 @@ export const useGameLogic = () => {
             }
 
             const now = Date.now();
-            if (now >= challengeState.endTime) {
-                console.log("[Host] Challenge window expired. Resolving challenge...");
+            if (now >= challengeState.endTime || (challengeState.startTime && now - challengeState.startTime > 6000)) {
+                console.log("[Host] Challenge window expired (6s). Resolving challenge...");
                 clearInterval(timer);
                 resolveChallenge();
             }
@@ -508,9 +517,10 @@ export const useGameLogic = () => {
             if (actorId === targetP?.id) return;
             const updatedChallenge = {
                 ...challengeState,
-                challengerId: actorId,
+                challengerId: currentTurn === 0 ? 1 : 0,
                 status: 'CHALLENGED' as const,
-                endTime: Date.now() + 5000
+                endTime: Date.now() + 5000,
+                startTime: challengeState.startTime || Date.now()
             };
             broadcastState(players, 'CHALLENGE', currentTurn, newDiscard, newDeck.length, true, updatedChallenge);
             return;
@@ -624,6 +634,7 @@ export const useGameLogic = () => {
                             meld: cardsToMeld,
                             challengerId: currentTurn === 0 ? 1 : 0,
                             status: 'PENDING',
+                            startTime: Date.now(),
                             endTime: Date.now() + 5000,
                             votes: {}
                         };

@@ -66,6 +66,7 @@ export interface SyncStatePayload {
         meld: CardData[];
         challengerId?: number | null;
         votes: { [playerId: number]: boolean }; // true = accept, false = reject
+        startTime?: number;
         endTime: number;
         status: 'PENDING' | 'CHALLENGED';
     };
