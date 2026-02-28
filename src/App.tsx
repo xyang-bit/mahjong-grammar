@@ -9,18 +9,16 @@ export default function App() {
     const { currentPlayer, players, mode, role, isMyTurn, myHand, currentProblem, currentProblemIndex, activeLesson } = game;
     const [playerName, setPlayerName] = useState('');
     const [targetRoomId, setTargetRoomId] = useState('');
-    const [desyncPopupVisible, setDesyncPopupVisible] = useState(false);
 
-    // SILENT RETRY: Desync Popup Timer
+    // SILENT RETRY: Auto-Pass on Desync
     useEffect(() => {
         if (role !== 'OFFLINE' && (!players || !Array.isArray(players) || players.length === 0)) {
-            // Start 1500ms silent retry timer
+            // Start 3000ms silent retry timer
             const timer = setTimeout(() => {
-                setDesyncPopupVisible(true);
-            }, 1500);
-            return () => clearTimeout(timer); // If players arrive before 1.5s, clear timer
-        } else {
-            setDesyncPopupVisible(false); // Hide popup if players are present
+                console.warn("[UI Guard] Sync timeout. Triggering auto-pass.");
+                game.skipMeld();
+            }, 3000);
+            return () => clearTimeout(timer); // If players arrive before 3s, clear timer
         }
     }, [players, role]);
 
@@ -196,19 +194,6 @@ export default function App() {
                 </div>
             )}
 
-            {/* ERROR RECOVERY GUARD - Silent Retry Mechanism */}
-            {desyncPopupVisible && (
-                <div className="fixed inset-0 z-[200] flex flex-col items-center justify-center bg-black/90 text-white p-8">
-                    <h2 className="text-2xl font-bold text-red-500 mb-4">State Desync Detected</h2>
-                    <p className="mb-8 text-center opacity-80">The game encountered missing player data.</p>
-                    <button
-                        onClick={() => window.location.reload()}
-                        className="bg-white text-black px-8 py-3 rounded-full font-bold hover:bg-gray-200"
-                    >
-                        Reload Game
-                    </button>
-                </div>
-            )}
 
             {/* CHALLENGE WINDOW */}
             {game.phase === 'CHALLENGE' && game.challengeState && (game.players?.length > 0) && (

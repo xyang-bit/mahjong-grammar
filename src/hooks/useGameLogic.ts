@@ -622,7 +622,7 @@ export const useGameLogic = () => {
 
                         const challenge: SyncStatePayload['challenge'] = {
                             meld: cardsToMeld,
-                            challengerId: null,
+                            challengerId: currentTurn === 0 ? 1 : 0,
                             status: 'PENDING',
                             endTime: Date.now() + 5000,
                             votes: {}
