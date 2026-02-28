@@ -344,18 +344,16 @@ export const useGameLogic = () => {
         }
     };
 
-    const finalizeMeld = useCallback((cardsToMeld: CardData[]) => {
+    const finalizeMeld = useCallback((cardsToMeld: CardData[], scoreReward: number = 0) => {
         if (role !== 'HOST') return;
 
-        console.log("[Host] Finalizing Meld:", cardsToMeld.map(c => c.hanzi).join(''));
+        console.log(`[Host] Finalizing Meld (+${scoreReward}pts):`, cardsToMeld.map(c => c.hanzi).join(''));
         const activePIdx = currentTurn;
         const activeP = players?.[activePIdx];
         if (!activeP) {
             console.error("[Host] Cannot finalize meld: Active player not found at index", activePIdx);
             return;
         }
-
-        const meldScore = calculateMeldScore(cardsToMeld);
 
         let currentDeck = [...deck];
         const cardsNeeded = 11 - (activeP.hand?.length || 0);
@@ -386,11 +384,11 @@ export const useGameLogic = () => {
                 ...p,
                 hand: newHand,
                 melds: [...currentMelds, cardsToMeld],
-                score: p.score + meldScore
+                score: p.score + scoreReward
             };
         });
 
-        triggerMessage(`Score Awarded: ${meldScore}pts!`);
+        if (scoreReward > 0) triggerMessage(`Score Awarded: ${scoreReward}pts!`);
 
         // Move to Discard phase after successful meld
         // CRITICAL: Clear the challenge state to remove overlays for everyone
@@ -410,15 +408,21 @@ export const useGameLogic = () => {
         // Strict Array Bounds: Stop crash if player slot is missing
         if (!players || players.length < 2 || !players[activePIdx]) {
             console.warn("[Host] resolveChallenge: Insufficient or missing player data. Defaulting to Pass.");
-            finalizeMeld(challengeState.meld);
+            finalizeMeld(challengeState.meld, 20); // Award basic points on recovery
             return;
         }
 
+        // --- SCORING RULES ---
+        // PENDING (No Challenge triggered) -> +20 points
+        // CHALLENGED (and survives) -> +40 bonus points
+        const isChallenged = challengeState.status === 'CHALLENGED';
+        const scoreReward = isChallenged ? 40 : 20;
+
         // If in CHALLENGED status, verify the challenger exists
-        if (challengeState.status === 'CHALLENGED') {
+        if (isChallenged) {
             if (challengerIdx === null || challengerIdx === undefined || !players[challengerIdx as number]) {
                 console.warn("[Host] resolveChallenge: Challenger missing or invalid. Defaulting to Pass.");
-                finalizeMeld(challengeState.meld);
+                finalizeMeld(challengeState.meld, 40); // Survives by default
                 return;
             }
         }
@@ -430,10 +434,11 @@ export const useGameLogic = () => {
         console.log(`[Host] Resolving Challenge: Accept(${acceptCount}) vs Reject(${rejectCount})`);
 
         if (acceptCount >= rejectCount) {
-            triggerMessage("Challenge Failed! Meld Accepted.");
-            finalizeMeld(challengeState.meld);
+            if (isChallenged) triggerMessage("Challenge Failed! Meld Accepted (+40pts).");
+            else triggerMessage("Meld Accepted (+20pts).");
+            finalizeMeld(challengeState.meld, scoreReward);
         } else {
-            triggerMessage("Incorrect grammar! Try again.");
+            triggerMessage("Incorrect grammar! Tiles returned.");
             const newPlayers = players.map((p, idx) => {
                 const targetTurn = currentTurn || 0;
                 if (idx !== targetTurn || !p) return p;
@@ -452,7 +457,7 @@ export const useGameLogic = () => {
             // AUTO-RESOLVE SAFETY: If stuck in MELD/CHALLENGE for too long, force forward
             setTimeout(() => {
                 if (phase === 'CHALLENGE' || phase === 'MELD') {
-                    console.log("[Host] Auto-resolving stuck phase to DISCARD");
+                    console.log("[Host] Auto-resolving stuck phase to DISCARD (+20pts)");
                     setPhase('DISCARD');
                     broadcastState(newPlayers, 'DISCARD', currentTurn, discardPile, deck.length, true, null);
                 }
