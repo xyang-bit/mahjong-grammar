@@ -1,5 +1,5 @@
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { MahjongTile } from './components/MahjongTile';
 import { useGameLogic } from './hooks/useGameLogic';
 import { LESSONS, DECK_MANIFEST, POWER_UP_IDS, BASIC_SHELF_IDS } from './constants';
@@ -9,6 +9,20 @@ export default function App() {
     const { currentPlayer, players, mode, role, isMyTurn, myHand, currentProblem, currentProblemIndex, activeLesson } = game;
     const [playerName, setPlayerName] = useState('');
     const [targetRoomId, setTargetRoomId] = useState('');
+    const [desyncPopupVisible, setDesyncPopupVisible] = useState(false);
+
+    // SILENT RETRY: Desync Popup Timer
+    useEffect(() => {
+        if (role !== 'OFFLINE' && (!players || !Array.isArray(players) || players.length === 0)) {
+            // Start 1500ms silent retry timer
+            const timer = setTimeout(() => {
+                setDesyncPopupVisible(true);
+            }, 1500);
+            return () => clearTimeout(timer); // If players arrive before 1.5s, clear timer
+        } else {
+            setDesyncPopupVisible(false); // Hide popup if players are present
+        }
+    }, [players, role]);
 
     // Helper for layout adjustments
     const isBasicShelfVisible = (game.phase === 'MELD' && isMyTurn) || (game.phase === 'DRAW' && isMyTurn);
@@ -182,8 +196,8 @@ export default function App() {
                 </div>
             )}
 
-            {/* ERROR RECOVERY GUARD */}
-            {(!game.players || !Array.isArray(game.players)) && (
+            {/* ERROR RECOVERY GUARD - Silent Retry Mechanism */}
+            {desyncPopupVisible && (
                 <div className="fixed inset-0 z-[200] flex flex-col items-center justify-center bg-black/90 text-white p-8">
                     <h2 className="text-2xl font-bold text-red-500 mb-4">State Desync Detected</h2>
                     <p className="mb-8 text-center opacity-80">The game encountered missing player data.</p>
@@ -300,19 +314,8 @@ export default function App() {
                                     </div>
                                 </div>);
                         } catch (err) {
-                            console.error("[UI Guard] Crash caught in Challenge UI. Suppressing.", err);
-                            return (
-                                <div className="bg-white p-8 rounded-3xl border-4 border-red-500 text-center shadow-2xl">
-                                    <h2 className="text-2xl font-bold text-red-500 mb-4">State Desync Recovered</h2>
-                                    <p className="mb-4 text-black opacity-80">The game encountered missing data during sync.</p>
-                                    <button
-                                        onClick={() => window.location.reload()}
-                                        className="bg-black text-white px-8 py-3 rounded-full font-bold hover:bg-gray-800 transition-colors"
-                                    >
-                                        Reload Data
-                                    </button>
-                                </div>
-                            );
+                            console.error("[UI Guard] Crash caught in Challenge UI. Suppressing for silent retry.", err);
+                            return null;
                         }
                     })()}
                 </div>

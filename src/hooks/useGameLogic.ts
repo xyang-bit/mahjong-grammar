@@ -628,8 +628,18 @@ export const useGameLogic = () => {
                             votes: {}
                         };
 
-                        newPhase = 'CHALLENGE';
-                        broadcastState(updatedPlayers, 'CHALLENGE', currentTurn, newDiscard, newDeck.length, true, challenge);
+                        // Pre-broadcast the MELD phase so tiles leave hand immediately
+                        broadcastState(updatedPlayers, 'MELD', currentTurn, newDiscard, newDeck.length, true, null);
+                        setPlayers(updatedPlayers);
+
+                        // 800ms delay allows Firebase to push updatedPlayers to clients
+                        setTimeout(() => {
+                            console.log("[Host] 800ms sync delay finished. Transitioning to CHALLENGE.");
+                            broadcastState(updatedPlayers, 'CHALLENGE', currentTurn, newDiscard, newDeck.length, true, challenge);
+                            setPhase('CHALLENGE');
+                            setChallengeState(challenge);
+                        }, 800);
+
                         return;
                     } else {
                         // Offline or Solo Sandbox: Award points immediately
