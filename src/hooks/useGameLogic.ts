@@ -445,20 +445,12 @@ export const useGameLogic = () => {
         console.log(`[Host] Challenge timer started (setInterval). Target: ${challengeState.endTime}`);
 
         const timer = setInterval(() => {
-            // HARD FIX: Safe Array Access inside Timer
-            const challengerIdx = challengeState.challengerId;
-            const safeIdx = (challengerIdx !== null && challengerIdx !== undefined) ? challengerIdx : -1;
-            const p = players?.[safeIdx as number];
-
-            if (!p || challengeState.status !== 'CHALLENGED') {
-                // Wait for player array to sync. Do not immediately clear interval.
-                console.log("[Host] Missing player slot or not challenged. Waiting for array sync...");
-                return;
-            }
-
             const now = Date.now();
-            if (now >= challengeState.endTime || (challengeState.startTime && now - challengeState.startTime > 6000)) {
-                console.log("[Host] Challenge window expired (6s). Resolving challenge...");
+
+            // Allow timeout whether PENDING (nobody clicked) or CHALLENGED (voting finished)
+            // Safety fallback of 12 seconds in case time changes drastically
+            if (now >= challengeState.endTime || (challengeState.startTime && now - challengeState.startTime > 12000)) {
+                console.log("[Host] Challenge window expired. Resolving challenge...");
                 clearInterval(timer);
                 resolveChallenge();
             }
@@ -469,7 +461,7 @@ export const useGameLogic = () => {
             console.log("[Host] Cleaning up challenge timer (unmount/phase change)");
             clearInterval(timer);
         };
-    }, [role, roomId, phase, challengeState, players, resolveChallenge, finalizeMeld]);
+    }, [role, roomId, phase, challengeState, resolveChallenge]);
 
     const processAction = (action: ActionPayload, actorId: number) => {
         if (role === 'CLIENT') return;
@@ -493,11 +485,11 @@ export const useGameLogic = () => {
             if (phase !== 'CHALLENGE' || !challengeState) return;
             const targetP = activeP || newPlayers?.[0];
             if (actorId === targetP?.id) return;
-            const updatedChallenge = {
+            const updatedChallenge: SyncStatePayload['challenge'] = {
                 ...challengeState,
-                challengerId: currentTurn === 0 ? 1 : 0,
+                challengerId: actorId, // Use the actual person who clicked the button!
                 status: 'CHALLENGED' as const,
-                endTime: Date.now() + 5000,
+                endTime: Date.now() + 8000, // Give them 8 seconds to vote
                 startTime: challengeState.startTime || Date.now()
             };
             broadcastState(players, 'CHALLENGE', currentTurn, newDiscard, newDeck.length, true, updatedChallenge);
@@ -610,7 +602,7 @@ export const useGameLogic = () => {
 
                         const challenge: SyncStatePayload['challenge'] = {
                             meld: cardsToMeld,
-                            challengerId: currentTurn === 0 ? 1 : 0,
+                            challengerId: -1,
                             status: 'PENDING',
                             startTime: Date.now(),
                             endTime: Date.now() + 5000, // 5 Second Window

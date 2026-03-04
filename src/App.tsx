@@ -220,8 +220,12 @@ export default function App() {
                             return (
                                 <div className="bg-white w-full max-w-2xl rounded-3xl border-4 border-[var(--color-stroke-primary)] shadow-[0_12px_0_var(--color-stroke-primary)] p-8 flex flex-col items-center space-y-8">
                                     <div className="text-center space-y-2">
-                                        <h2 className="text-2xl font-bold uppercase tracking-widest text-[var(--color-verb-red)]">Challenge Window</h2>
-                                        <p className="font-bold opacity-60">Is this a valid Chinese sentence?</p>
+                                        <h2 className="text-2xl font-bold uppercase tracking-widest text-[var(--color-verb-red)]">
+                                            {game.challengeState.status === 'PENDING' ? "Waiting for Challenge..." : "VOTE NOW!"}
+                                        </h2>
+                                        <p className="font-bold opacity-60">
+                                            {game.challengeState.status === 'PENDING' ? "Will anyone challenge?" : "Is this a valid Chinese sentence?"}
+                                        </p>
                                     </div>
 
                                     {/* The Sentence */}
@@ -251,7 +255,7 @@ export default function App() {
                                                         onClick={game.challengeMeld}
                                                         className="bg-[var(--color-verb-red)] text-white px-12 py-4 rounded-2xl border-2 border-[var(--color-stroke-primary)] shadow-[0_6px_0_var(--color-stroke-primary)] active:shadow-none active:translate-y-1 font-bold text-xl hover:brightness-110 transition-all"
                                                     >
-                                                        Challenge!
+                                                        I Challenge this Sentence!
                                                     </button>
                                                 ) : (
                                                     <div className="text-[var(--color-noun-blue)] font-bold animate-pulse text-center">
