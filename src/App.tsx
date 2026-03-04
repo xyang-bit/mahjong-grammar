@@ -205,11 +205,10 @@ export default function App() {
                             return null;
                         }
 
-                        // Safety Check: Avoid reading invalid index when actually challenged
+                        // Let optional chaining handle out of bounds gracefully later instead of throwing
                         if (game.challengeState.status === 'CHALLENGED' && game.challengeState.challengerId !== null && game.challengeState.challengerId !== undefined && game.challengeState.challengerId >= 0) {
                             if (!game.players[game.challengeState.challengerId as number]) {
-                                console.warn(`[UI Guard] Player index ${game.challengeState.challengerId} not found. Suppressing crash.`);
-                                return null;
+                                console.warn(`[UI Guard] Player index ${game.challengeState.challengerId} not found, but allowing render with fallback name.`);
                             }
                         }
 
@@ -268,28 +267,36 @@ export default function App() {
                                         ) : (
                                             <div className="space-y-6 w-full">
                                                 <div className="text-center font-bold text-xl text-[var(--color-verb-red)] animate-bounce italic">
-                                                    SENTENCE CHALLENGED!
+                                                    {game.players.find(p => p.id === game.challengeState?.challengerId)?.name || 'Someone'} challenged!
                                                 </div>
 
                                                 <div className="grid grid-cols-2 gap-4">
-                                                    <button
-                                                        onClick={() => game.voteMeld(true)}
-                                                        className={`py-6 rounded-2xl border-2 border-[var(--color-stroke-primary)] font-bold text-xl transition-all
-                                                ${game.challengeState.votes[game.myPlayerId] === true
-                                                                ? 'bg-[var(--color-adj-green)] text-white shadow-none translate-y-1'
-                                                                : 'bg-white shadow-[0_6px_0_var(--color-stroke-primary)] hover:brightness-95'}`}
-                                                    >
-                                                        Accept (Valid)
-                                                    </button>
-                                                    <button
-                                                        onClick={() => game.voteMeld(false)}
-                                                        className={`py-6 rounded-2xl border-2 border-[var(--color-stroke-primary)] font-bold text-xl transition-all
-                                                ${game.challengeState.votes[game.myPlayerId] === false
-                                                                ? 'bg-[var(--color-verb-red)] text-white shadow-none translate-y-1'
-                                                                : 'bg-white shadow-[0_6px_0_var(--color-stroke-primary)] hover:brightness-95'}`}
-                                                    >
-                                                        Reject (Error)
-                                                    </button>
+                                                    {!isMyTurn ? (
+                                                        <>
+                                                            <button
+                                                                onClick={() => game.voteMeld(true)}
+                                                                className={`py-6 rounded-2xl border-2 border-[var(--color-stroke-primary)] font-bold text-xl transition-all
+                                                        ${game.challengeState.votes[game.myPlayerId] === true
+                                                                        ? 'bg-[var(--color-adj-green)] text-white shadow-none translate-y-1'
+                                                                        : 'bg-white shadow-[0_6px_0_var(--color-stroke-primary)] hover:brightness-95'}`}
+                                                            >
+                                                                Accept (Valid)
+                                                            </button>
+                                                            <button
+                                                                onClick={() => game.voteMeld(false)}
+                                                                className={`py-6 rounded-2xl border-2 border-[var(--color-stroke-primary)] font-bold text-xl transition-all
+                                                        ${game.challengeState.votes[game.myPlayerId] === false
+                                                                        ? 'bg-[var(--color-verb-red)] text-white shadow-none translate-y-1'
+                                                                        : 'bg-white shadow-[0_6px_0_var(--color-stroke-primary)] hover:brightness-95'}`}
+                                                            >
+                                                                Reject (Error)
+                                                            </button>
+                                                        </>
+                                                    ) : (
+                                                        <div className="col-span-2 text-[var(--color-noun-blue)] font-bold animate-pulse text-center">
+                                                            Waiting for votes...
+                                                        </div>
+                                                    )}
                                                 </div>
 
                                                 {/* Vote Status */}
