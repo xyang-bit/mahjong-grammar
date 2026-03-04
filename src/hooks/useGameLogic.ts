@@ -401,69 +401,40 @@ export const useGameLogic = () => {
     const resolveChallenge = useCallback(() => {
         if (role !== 'HOST' || !challengeState) return;
 
-        // Global Array Check: Ensure players data is fully loaded and challenger is valid
         const activePIdx = currentTurn;
-        const challengerIdx = challengeState.challengerId;
-
-        // Strict Array Bounds: Stop crash if player slot is missing
-        if (!players || players.length < 2 || !players[activePIdx]) {
-            console.warn("[Host] resolveChallenge: Insufficient or missing player data. Defaulting to Pass.");
-            finalizeMeld(challengeState.meld, 20); // Award basic points on recovery
-            return;
-        }
-
-        // --- SCORING RULES ---
-        // PENDING (No Challenge triggered) -> +20 points
-        // CHALLENGED (and survives) -> +40 bonus points
-        const isChallenged = challengeState.status === 'CHALLENGED';
-        const scoreReward = isChallenged ? 40 : 20;
-
-        // If in CHALLENGED status, verify the challenger exists
-        if (isChallenged) {
-            if (challengerIdx === null || challengerIdx === undefined || !players[challengerIdx as number]) {
-                console.warn("[Host] resolveChallenge: Challenger missing or invalid. Defaulting to Pass.");
-                finalizeMeld(challengeState.meld, 40); // Survives by default
-                return;
-            }
-        }
+        if (!players || !players[activePIdx]) return;
 
         const votes = Object.values(challengeState.votes || {});
         const acceptCount = votes.filter(v => v === true).length;
         const rejectCount = votes.filter(v => v === false).length;
 
-        console.log(`[Host] Resolving Challenge: Accept(${acceptCount}) vs Reject(${rejectCount})`);
+        // RULE: If there is a Challenge and Rejects >= Accepts, it fails.
+        // ALSO: If it was challenged but there are NO votes (timeout), it fails.
+        const isChallenged = challengeState.status === 'CHALLENGED';
+        const isTimeoutFailure = isChallenged && acceptCount === 0 && rejectCount === 0;
 
-        if (acceptCount >= rejectCount) {
-            if (isChallenged) triggerMessage("Challenge Failed! Meld Accepted (+40pts).");
-            else triggerMessage("Meld Accepted (+20pts).");
+        if (acceptCount > rejectCount || (!isChallenged && acceptCount >= rejectCount) || (isChallenged && acceptCount >= rejectCount && !isTimeoutFailure)) {
+            // SUCCESS: Sentence is accepted
+            const scoreReward = isChallenged ? 40 : 20;
+            triggerMessage(isChallenged ? "Challenge Failed! +40pts" : "Meld Accepted! +20pts");
             finalizeMeld(challengeState.meld, scoreReward);
         } else {
-            triggerMessage("Incorrect grammar! Tiles returned.");
+            // FAILURE: Sentence is rejected (or challenge timed out)
+            triggerMessage(isTimeoutFailure ? "⏳ Challenge Timed Out! Tiles returned." : "❌ Grammar Rejected! Try a new sentence.");
+
             const newPlayers = players.map((p, idx) => {
-                const targetTurn = currentTurn || 0;
-                if (idx !== targetTurn || !p) return p;
-                const currentHand = p.hand || [];
-                // Return tiles to the active player's hand
-                return { ...p, hand: [...currentHand, ...challengeState.meld] };
+                if (idx !== activePIdx) return p;
+                // Return tiles to hand, award 0 points, keep current melds as they were
+                return { ...p, hand: [...p.hand, ...challengeState.meld] };
             });
-            // Update local state for Host
+
             setPlayers(newPlayers);
-            setPhase('MELD');
+            setPhase('MELD'); // FORCE REMAIN IN MELD PHASE
 
-            // Sync to clients: Keep phase as MELD, pass the updated players array
-            // The challenge state in Firebase will be overwritten/cleared by the broadcast
+            // Broadcast the reset to all players
             broadcastState(newPlayers, 'MELD', currentTurn, discardPile, deck.length, true, null);
-
-            // AUTO-RESOLVE SAFETY: If stuck in MELD/CHALLENGE for too long, force forward
-            setTimeout(() => {
-                if (phase === 'CHALLENGE' || phase === 'MELD') {
-                    console.log("[Host] Auto-resolving stuck phase to DISCARD (+20pts)");
-                    setPhase('DISCARD');
-                    broadcastState(newPlayers, 'DISCARD', currentTurn, discardPile, deck.length, true, null);
-                }
-            }, 6000);
         }
-    }, [role, challengeState, players, currentTurn, discardPile, deck.length, broadcastState, finalizeMeld, phase]);
+    }, [role, challengeState, players, currentTurn, discardPile, deck.length, broadcastState, finalizeMeld]);
 
     // HOST TIMER ENGINE (Challenge Window)
     useEffect(() => {
@@ -629,9 +600,9 @@ export const useGameLogic = () => {
 
                     // --- STAGE 2: MULTIPLAYER CONSENSUS LOOP ---
                     if (role === 'HOST' && players.length > 1) {
-                        // Remove cards from hand visually before the review
                         const updatedPlayers = players.map((p, idx) => {
                             if (idx !== currentTurn) return p;
+                            // Temporarily remove cards from hand, but DO NOT add score yet
                             return { ...p, hand: p.hand.filter((_, i) => !indicesToRemove.includes(i)) };
                         });
 
@@ -640,22 +611,19 @@ export const useGameLogic = () => {
                             challengerId: currentTurn === 0 ? 1 : 0,
                             status: 'PENDING',
                             startTime: Date.now(),
-                            endTime: Date.now() + 5000,
+                            endTime: Date.now() + 5000, // 5 Second Window
                             votes: {}
                         };
 
-                        // Pre-broadcast the MELD phase so tiles leave hand immediately
-                        broadcastState(updatedPlayers, 'MELD', currentTurn, newDiscard, newDeck.length, true, null);
                         setPlayers(updatedPlayers);
+                        broadcastState(updatedPlayers, 'MELD', currentTurn, newDiscard, newDeck.length, true, null);
 
-                        // 800ms delay allows Firebase to push updatedPlayers to clients
                         setTimeout(() => {
-                            console.log("[Host] 800ms sync delay finished. Transitioning to CHALLENGE.");
+                            // Transition to CHALLENGE phase after sync
                             broadcastState(updatedPlayers, 'CHALLENGE', currentTurn, newDiscard, newDeck.length, true, challenge);
                             setPhase('CHALLENGE');
                             setChallengeState(challenge);
                         }, 800);
-
                         return;
                     } else {
                         // Offline or Solo Sandbox: Award points immediately
