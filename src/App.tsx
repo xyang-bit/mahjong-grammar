@@ -205,8 +205,8 @@ export default function App() {
                             return null;
                         }
 
-                        // Safety Check: Avoid reading index '2' or any invalid index
-                        if (game.challengeState.challengerId !== null && game.challengeState.challengerId !== undefined) {
+                        // Safety Check: Avoid reading invalid index when actually challenged
+                        if (game.challengeState.status === 'CHALLENGED' && game.challengeState.challengerId !== null && game.challengeState.challengerId !== undefined && game.challengeState.challengerId >= 0) {
                             if (!game.players[game.challengeState.challengerId as number]) {
                                 console.warn(`[UI Guard] Player index ${game.challengeState.challengerId} not found. Suppressing crash.`);
                                 return null;
