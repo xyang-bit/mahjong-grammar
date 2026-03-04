@@ -408,30 +408,32 @@ export const useGameLogic = () => {
         const acceptCount = votes.filter(v => v === true).length;
         const rejectCount = votes.filter(v => v === false).length;
 
-        // RULE: If there is a Challenge and Rejects >= Accepts, it fails.
-        // ALSO: If it was challenged but there are NO votes (timeout), it fails.
         const isChallenged = challengeState.status === 'CHALLENGED';
-        const isTimeoutFailure = isChallenged && acceptCount === 0 && rejectCount === 0;
 
-        if (acceptCount > rejectCount || (!isChallenged && acceptCount >= rejectCount) || (isChallenged && acceptCount >= rejectCount && !isTimeoutFailure)) {
-            // SUCCESS: Sentence is accepted
+        // LOGIC: A meld is only REJECTED if:
+        // 1. It was challenged AND Rejects > Accepts
+        // 2. It was challenged AND it timed out with 0 votes (optional strict rule)
+        const isRejected = isChallenged && (rejectCount > acceptCount || (acceptCount === 0 && rejectCount === 0));
+
+        if (!isRejected) {
+            // SUCCESS PATH: Award points and move to Discard
             const scoreReward = isChallenged ? 40 : 20;
             triggerMessage(isChallenged ? "Challenge Failed! +40pts" : "Meld Accepted! +20pts");
             finalizeMeld(challengeState.meld, scoreReward);
         } else {
-            // FAILURE: Sentence is rejected (or challenge timed out)
-            triggerMessage(isTimeoutFailure ? "⏳ Challenge Timed Out! Tiles returned." : "❌ Grammar Rejected! Try a new sentence.");
+            // FAILURE PATH: Return tiles and stay in Meld phase
+            triggerMessage("❌ Grammar Rejected! Tiles returned.");
 
             const newPlayers = players.map((p, idx) => {
                 if (idx !== activePIdx) return p;
-                // Return tiles to hand, award 0 points, keep current melds as they were
+                // IMPORTANT: Put tiles back, but do NOT award points
                 return { ...p, hand: [...p.hand, ...challengeState.meld] };
             });
 
             setPlayers(newPlayers);
-            setPhase('MELD'); // FORCE REMAIN IN MELD PHASE
+            setPhase('MELD');
 
-            // Broadcast the reset to all players
+            // Sync everything back to MELD phase for all players
             broadcastState(newPlayers, 'MELD', currentTurn, discardPile, deck.length, true, null);
         }
     }, [role, challengeState, players, currentTurn, discardPile, deck.length, broadcastState, finalizeMeld]);
