@@ -265,8 +265,8 @@ export default function App() {
                                         ) : (
                                             <div className="space-y-6 w-full">
                                                 <div className="text-center font-bold text-xl text-[var(--color-verb-red)] animate-bounce italic">
-                                                    {/* SAFE LOOKUP: Use find or optional chaining */}
-                                                    {game.players.find(p => p.id === game.challengeState?.challengerId)?.name || 'Someone'} challenged!
+                                                    {/* This 'find' method is safer than direct index access */}
+                                                    {(game.players.find(p => p.id === game.challengeState?.challengerId)?.name) || "Someone"} challenged!
                                                 </div>
 
                                                 <div className="grid grid-cols-2 gap-4">
