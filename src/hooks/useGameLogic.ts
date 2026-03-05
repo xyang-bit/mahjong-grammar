@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { CardData, Player, WordType, GameMode, Lesson, NetworkRole, ActionPayload, SelectionItem, Phase, SyncStatePayload } from '../types';
 import { generateDeck, DECK_MANIFEST, LESSONS } from '../constants';
 import { db } from '../firebaseConfig';
@@ -30,6 +30,7 @@ export const useGameLogic = () => {
     const [roomId, setRoomId] = useState<string>('');
     const [myPlayerId, setMyPlayerId] = useState<number>(1);
     const [challengeState, setChallengeState] = useState<SyncStatePayload['challenge'] | null>(null);
+    const challengeTimerRef = useRef<NodeJS.Timeout | null>(null);
 
     // Helpers
     const currentPlayer = players?.[currentTurn] || { name: 'Connecting...', hand: [], melds: [], id: -1, score: 0, isHost: false } as Player;
@@ -398,17 +399,19 @@ export const useGameLogic = () => {
         setPhase('DISCARD');
     }, [role, currentTurn, players, deck, discardPile, broadcastState]);
 
-    const resolveChallenge = useCallback(() => {
-        if (role !== 'HOST' || !challengeState) return;
+    const resolveChallenge = useCallback((latestChallenge?: SyncStatePayload['challenge']) => {
+        if (role !== 'HOST') return;
+        const currentChallenge = latestChallenge || challengeState;
+        if (!currentChallenge) return;
 
         const activePIdx = currentTurn;
         if (!players || !players[activePIdx]) return;
 
-        const votes = Object.values(challengeState.votes || {});
+        const votes = Object.values(currentChallenge.votes || {});
         const acceptCount = votes.filter(v => v === true).length;
         const rejectCount = votes.filter(v => v === false).length;
 
-        const isChallenged = challengeState.status === 'CHALLENGED';
+        const isChallenged = currentChallenge.status === 'CHALLENGED';
 
         // LOGIC: A meld is only REJECTED if:
         // 1. It was challenged AND Rejects > Accepts
@@ -419,7 +422,7 @@ export const useGameLogic = () => {
             // SUCCESS PATH: Award points and move to Discard
             const scoreReward = isChallenged ? 40 : 20;
             triggerMessage(isChallenged ? "Challenge Failed! +40pts" : "Meld Accepted! +20pts");
-            finalizeMeld(challengeState.meld, scoreReward);
+            finalizeMeld(currentChallenge.meld, scoreReward);
         } else {
             // FAILURE PATH: Return tiles and stay in Meld phase
             triggerMessage("❌ Grammar Rejected! Tiles returned.");
@@ -427,7 +430,7 @@ export const useGameLogic = () => {
             const newPlayers = players.map((p, idx) => {
                 if (idx !== activePIdx) return p;
                 // IMPORTANT: Put tiles back, but do NOT award points
-                return { ...p, hand: [...p.hand, ...challengeState.meld] };
+                return { ...p, hand: [...p.hand, ...currentChallenge.meld] };
             });
 
             setPlayers(newPlayers);
@@ -452,14 +455,17 @@ export const useGameLogic = () => {
             if (now >= challengeState.endTime || (challengeState.startTime && now - challengeState.startTime > 12000)) {
                 console.log("[Host] Challenge window expired. Resolving challenge...");
                 clearInterval(timer);
+                challengeTimerRef.current = null;
                 resolveChallenge();
             }
         }, 1000); // Check every second
+        challengeTimerRef.current = timer;
 
         // STRICT TIMER CLEANUP
         return () => {
             console.log("[Host] Cleaning up challenge timer (unmount/phase change)");
             clearInterval(timer);
+            challengeTimerRef.current = null;
         };
     }, [role, roomId, phase, challengeState, resolveChallenge]);
 
@@ -500,7 +506,21 @@ export const useGameLogic = () => {
             if (phase !== 'CHALLENGE' || !challengeState || challengeState.status !== 'CHALLENGED') return;
             const updatedVotes = { ...challengeState.votes, [actorId]: action.data as boolean };
             const updatedChallenge = { ...challengeState, votes: updatedVotes };
-            broadcastState(players, 'CHALLENGE', currentTurn, newDiscard, newDeck.length, true, updatedChallenge);
+
+            // SHORT-CIRCUIT CHECK: If everyone has voted, resolve early!
+            const eligibleVoters = players.length - 1;
+            const votesCast = Object.keys(updatedVotes).length;
+
+            if (votesCast >= eligibleVoters) {
+                console.log("[Host] All votes in. Resolving challenge early...");
+                if (challengeTimerRef.current) {
+                    clearInterval(challengeTimerRef.current);
+                    challengeTimerRef.current = null;
+                }
+                resolveChallenge(updatedChallenge);
+            } else {
+                broadcastState(players, 'CHALLENGE', currentTurn, newDiscard, newDeck.length, true, updatedChallenge);
+            }
             return;
         }
 
