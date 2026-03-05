@@ -213,7 +213,6 @@ export default function App() {
                         }
 
                         try {
-                            const activePlayer = game.players?.[game.currentTurn || 0];
                             const meld = game.challengeState.meld || [];
 
                             return (
@@ -249,7 +248,8 @@ export default function App() {
                                     <div className="w-full flex flex-col gap-4">
                                         {game.challengeState.status === 'PENDING' ? (
                                             <div className="flex justify-center">
-                                                {(activePlayer && game.myPlayerId !== activePlayer?.id) ? (
+                                                {/* If it's NOT my turn, I am the one who can Challenge */}
+                                                {(!isMyTurn || role === 'OFFLINE' || (role === 'HOST' && game.players.length === 1)) ? (
                                                     <button
                                                         onClick={game.challengeMeld}
                                                         className="bg-[var(--color-verb-red)] text-white px-12 py-4 rounded-2xl border-2 border-[var(--color-stroke-primary)] shadow-[0_6px_0_var(--color-stroke-primary)] active:shadow-none active:translate-y-1 font-bold text-xl hover:brightness-110 transition-all"
@@ -258,25 +258,29 @@ export default function App() {
                                                     </button>
                                                 ) : (
                                                     <div className="text-[var(--color-noun-blue)] font-bold animate-pulse text-center">
-                                                        {game.myPlayerId === activePlayer?.id
-                                                            ? "Searching for errors..."
-                                                            : "Waiting for peer review..."}
+                                                        Waiting for peer review...
                                                     </div>
                                                 )}
                                             </div>
                                         ) : (
                                             <div className="space-y-6 w-full">
                                                 <div className="text-center font-bold text-xl text-[var(--color-verb-red)] animate-bounce italic">
+                                                    {/* SAFE LOOKUP: Use find or optional chaining */}
                                                     {game.players.find(p => p.id === game.challengeState?.challengerId)?.name || 'Someone'} challenged!
                                                 </div>
 
                                                 <div className="grid grid-cols-2 gap-4">
-                                                    {!isMyTurn ? (
+                                                    {/* VOTING VISIBILITY FIX: 
+                                                      Show buttons if:
+                                                      1. It's NOT my turn (I'm the defender)
+                                                      2. OR I am the HOST (for testing purposes)
+                                                    */}
+                                                    {(role === 'HOST' || !isMyTurn) ? (
                                                         <>
                                                             <button
                                                                 onClick={() => game.voteMeld(true)}
                                                                 className={`py-6 rounded-2xl border-2 border-[var(--color-stroke-primary)] font-bold text-xl transition-all
-                                                        ${game.challengeState.votes[game.myPlayerId] === true
+                                                                ${game.challengeState.votes[game.myPlayerId] === true
                                                                         ? 'bg-[var(--color-adj-green)] text-white shadow-none translate-y-1'
                                                                         : 'bg-white shadow-[0_6px_0_var(--color-stroke-primary)] hover:brightness-95'}`}
                                                             >
@@ -285,7 +289,7 @@ export default function App() {
                                                             <button
                                                                 onClick={() => game.voteMeld(false)}
                                                                 className={`py-6 rounded-2xl border-2 border-[var(--color-stroke-primary)] font-bold text-xl transition-all
-                                                        ${game.challengeState.votes[game.myPlayerId] === false
+                                                                ${game.challengeState.votes[game.myPlayerId] === false
                                                                         ? 'bg-[var(--color-verb-red)] text-white shadow-none translate-y-1'
                                                                         : 'bg-white shadow-[0_6px_0_var(--color-stroke-primary)] hover:brightness-95'}`}
                                                             >
@@ -294,18 +298,18 @@ export default function App() {
                                                         </>
                                                     ) : (
                                                         <div className="col-span-2 text-[var(--color-noun-blue)] font-bold animate-pulse text-center">
-                                                            Waiting for votes...
+                                                            The jury is voting...
                                                         </div>
                                                     )}
                                                 </div>
 
-                                                {/* Vote Status */}
+                                                {/* Vote Status Icons */}
                                                 <div className="flex justify-center gap-2">
                                                     {game.players?.map(p => {
                                                         const vote = game.challengeState?.votes?.[p.id];
                                                         return (
                                                             <div key={p.id} className={`w-8 h-8 rounded-full border-2 border-[var(--color-stroke-primary)] flex items-center justify-center font-bold text-xs
-                                                    ${vote === true ? 'bg-[var(--color-adj-green)] text-white' :
+                                                            ${vote === true ? 'bg-[var(--color-adj-green)] text-white' :
                                                                     vote === false ? 'bg-[var(--color-verb-red)] text-white' :
                                                                         'bg-gray-200 opacity-50'}`}>
                                                                 {p?.name?.[0] || '?'}
